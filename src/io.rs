@@ -104,3 +104,34 @@ pub fn send_mouse_up(button: MouseButton) {
         kam::SendInput(&[input], size_of::<INPUT>() as i32);
     }
 }
+
+pub fn _send_mouse(button: MouseButton) {
+    let (flag_down, flag_up) = match button {
+        MouseButton::Left => (kam::MOUSEEVENTF_LEFTDOWN, kam::MOUSEEVENTF_LEFTUP),
+        MouseButton::Right => (kam::MOUSEEVENTF_RIGHTDOWN, kam::MOUSEEVENTF_RIGHTUP),
+    };
+
+    let down = INPUT {
+        r#type: kam::INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dwFlags: flag_down,
+                ..Default::default()
+            },
+        },
+    };
+
+    let up = INPUT {
+        r#type: kam::INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dwFlags: flag_up,
+                ..Default::default()
+            },
+        },
+    };
+
+    unsafe {
+        kam::SendInput(&[down, up], size_of::<INPUT>() as i32);
+    }
+}

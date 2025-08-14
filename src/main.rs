@@ -1,12 +1,15 @@
 mod engine;
+mod font_engine;
 mod io;
 mod state;
 
-use {engine::Engine, state::State};
+use {engine::Engine, font_engine::FontEngine, state::State};
 
 fn main() {
     let mut engine = Engine::new();
     let mut state = State::new();
+    let font_engine = FontEngine::new();
+    let font = font_engine.load_font(24).expect("failed to load font");
 
     'main_loop: loop {
         while let Some(event) = engine.poll_event() {
@@ -16,7 +19,7 @@ fn main() {
         }
 
         state.step();
-        engine.draw(&state);
+        engine.draw(&state, &font);
         Engine::sleep();
     }
 }

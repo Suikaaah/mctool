@@ -1,4 +1,5 @@
 mod coord;
+
 use coord::Coord;
 
 pub enum Grid {

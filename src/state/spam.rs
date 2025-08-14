@@ -38,7 +38,7 @@ impl Spam {
     }
 
     pub fn step(&mut self, now: Instant) {
-        let elapsed = self.last - now;
+        let elapsed = now - self.last;
 
         if self.interval <= elapsed {
             let rem = elapsed.as_secs_f64() % self.interval.as_secs_f64();
