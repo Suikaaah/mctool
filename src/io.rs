@@ -8,6 +8,11 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging as wam;
 
+pub const INV_WIDTH: u32 = 486;
+pub const INV_HEIGHT: u32 = 228;
+pub const FILENAME_THUMBNAIL: &str = "thumbnail.png";
+pub const FILENAME_CLICKS: &str = "clicks.json";
+
 type WinResult<T> = windows::core::Result<T>;
 
 pub enum MouseButton {
@@ -102,7 +107,7 @@ pub fn send_mouse_up(button: MouseButton) {
     send_inputs(&[input]);
 }
 
-pub fn _send_mouse(button: MouseButton) {
+pub fn send_mouse(button: MouseButton) {
     let (flag_down, flag_up) = match button {
         MouseButton::Left => (kam::MOUSEEVENTF_LEFTDOWN, kam::MOUSEEVENTF_LEFTUP),
         MouseButton::Right => (kam::MOUSEEVENTF_RIGHTDOWN, kam::MOUSEEVENTF_RIGHTUP),
@@ -146,14 +151,19 @@ where
 
     std::fs::create_dir(&dir).expect("failed to create directory");
 
-    let json = File::create_new(dir.join("clicks.json")).expect("failed to create json");
+    let json = File::create_new(dir.join(FILENAME_CLICKS)).expect("failed to create json");
 
     serde_json::to_writer(json, clicks).expect("failed to write json");
 
-    crop_latest_png(screenshots, dir.join("thumbnail.png"));
+    crop_latest_png(screenshots, dir.join(FILENAME_THUMBNAIL));
 }
 
-pub fn _recipes(recipes: impl AsRef<Path>) -> Box<[PathBuf]> {
+pub fn load_clicks(path: impl AsRef<Path>) -> Box<[Grid]> {
+    let file = std::fs::File::open(path).expect("failed to open file");
+    serde_json::from_reader(file).expect("failed to parse json")
+}
+
+pub fn recipes(recipes: impl AsRef<Path>) -> Box<[PathBuf]> {
     std::fs::read_dir(recipes)
         .expect("failed to read directory")
         .filter_map(Result::ok)
@@ -170,7 +180,7 @@ fn crop_latest_png(search_in: impl AsRef<Path>, dst: impl AsRef<Path>) {
                 .expect("failed to decode image");
 
             image
-                .crop(717, 540, 486, 228)
+                .crop(717, 540, INV_WIDTH, INV_HEIGHT)
                 .save(dst)
                 .expect("failed to save image");
         }

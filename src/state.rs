@@ -1,7 +1,8 @@
 mod key;
+mod recipes;
 mod spam;
 
-use crate::{coord::Coord, grid::Grid};
+use crate::{coord::Coord, grid::Grid, io, state::recipes::Recipes};
 use key::Key;
 use spam::Spam;
 use std::time::{Duration, Instant};
@@ -15,10 +16,13 @@ pub struct State {
     key_record: Key,
     key_play: Key,
     key_click: Key,
+    key_prev: Key,
+    key_next: Key,
     pub spam_left: Spam,
     pub spam_right: Spam,
     pub spam_space: Spam,
     detail: Detail,
+    pub recipes: Recipes,
 }
 
 pub enum Detail {
@@ -26,10 +30,16 @@ pub enum Detail {
     Recording {
         clicks: Vec<Grid>,
     },
-    _Playing {
-        clicks: Vec<Option<Grid>>,
+    Playing {
+        clicks: Box<[(Grid, Click)]>,
         origin: Instant,
     },
+}
+
+pub enum Click {
+    New,
+    Moved,
+    Clicked,
 }
 
 impl State {
@@ -39,15 +49,18 @@ impl State {
     const KEY_RECORD: VIRTUAL_KEY = kam::VK_B;
     const KEY_PLAY: VIRTUAL_KEY = kam::VK_G;
     const KEY_CLICK: VIRTUAL_KEY = kam::VK_LBUTTON;
+    const KEY_PREV: VIRTUAL_KEY = kam::VK_XBUTTON1;
+    const KEY_NEXT: VIRTUAL_KEY = kam::VK_XBUTTON2;
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
+    const INT_PLAY: Duration = Duration::from_millis(100);
     const SCREENSHOTS: &str =
         r"C:\Users\Suika\AppData\Roaming\.minecraft\versions\1.8.9-OptiFine_HD_U_M5\screenshots";
     const RECIPES: &str = "recipes";
 
     pub fn new() -> Self {
-        use crate::io::{self, MouseButton};
+        use io::MouseButton;
 
         let spam_left = Spam::new(
             State::INT_LEFT,
@@ -75,10 +88,13 @@ impl State {
             key_record: Key::new(Self::KEY_RECORD),
             key_play: Key::new(Self::KEY_PLAY),
             key_click: Key::new(Self::KEY_CLICK),
+            key_prev: Key::new(Self::KEY_PREV),
+            key_next: Key::new(Self::KEY_NEXT),
             spam_left,
             spam_right,
             spam_space,
             detail: Detail::Idle,
+            recipes: Recipes::new(io::recipes(Self::RECIPES)),
         }
     }
 
@@ -102,13 +118,33 @@ impl State {
 
         match &mut self.detail {
             Detail::Idle => {
+                if self.key_prev.is_pressed() {
+                    self.recipes.decrement();
+                }
+
+                if self.key_next.is_pressed() {
+                    self.recipes.increment();
+                }
+
                 if self.key_record.is_pressed() {
                     self.detail = Detail::Recording { clicks: Vec::new() };
+                }
+
+                if self.key_play.is_pressed()
+                    && let Some(path) = self.recipes.get()
+                {
+                    self.detail = Detail::Playing {
+                        clicks: io::load_clicks(path.join(io::FILENAME_CLICKS))
+                            .into_iter()
+                            .map(|grid| (grid, Click::New))
+                            .collect(),
+                        origin: Instant::now(),
+                    };
                 }
             }
             Detail::Recording { clicks } => {
                 if self.key_click.is_pressed() {
-                    let coord = Coord::from(crate::io::get_cursor());
+                    let coord = Coord::from(io::get_cursor());
 
                     match coord.try_into() {
                         Ok(grid) => clicks.push(grid),
@@ -117,11 +153,33 @@ impl State {
                 }
 
                 if self.key_record.is_pressed() {
-                    crate::io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, clicks);
+                    io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, clicks);
+                    self.recipes = Recipes::new(io::recipes(Self::RECIPES));
                     self.detail = Detail::Idle;
                 }
             }
-            Detail::_Playing { .. } => (),
+            Detail::Playing { clicks, origin } => {
+                let index =
+                    (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
+
+                match clicks.get_mut(index) {
+                    None => {
+                        self.detail = Detail::Idle;
+                        self.draw_required = true;
+                    }
+                    Some((grid, click)) => match click {
+                        Click::New => {
+                            grid.set_cursor();
+                            *click = Click::Moved;
+                        }
+                        Click::Moved => {
+                            io::send_mouse(io::MouseButton::Left);
+                            *click = Click::Clicked;
+                        }
+                        Click::Clicked => (),
+                    },
+                }
+            }
         }
     }
 
@@ -141,6 +199,8 @@ impl State {
         update(&mut self.key_space);
         update(&mut self.key_record);
         update(&mut self.key_play);
+        update(&mut self.key_prev);
+        update(&mut self.key_next);
 
         // does not count as a modification which needs redraw
         self.key_click.update();
