@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub struct Coord(pub i32, pub i32);
 
 impl Coord {

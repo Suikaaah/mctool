@@ -1,11 +1,13 @@
+mod coord;
 mod engine;
 mod font_engine;
+mod grid;
 mod io;
 mod state;
 
-use {engine::Engine, font_engine::FontEngine, state::State};
-
 fn main() {
+    use {engine::Engine, font_engine::FontEngine, state::State};
+
     let mut engine = Engine::new();
     let mut state = State::new();
     let font_engine = FontEngine::new();

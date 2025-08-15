@@ -1,4 +1,4 @@
-use crate::{State, state::Detail};
+use crate::state::{Detail, State};
 use sdl2::{
     EventPump, Sdl,
     event::Event,
@@ -56,31 +56,31 @@ impl Engine {
     }
 
     pub fn draw(&mut self, state: &State, font: &Font) {
-        if state.is_modified() {
+        if state.draw_required() {
             self.canvas.set_draw_color(Color::BLACK);
             self.canvas.clear();
 
             if state.spam_left.is_active() {
-                self.render_font(font, "left", (0, 0));
+                self.render_font(font, "left", (0, 50));
             }
 
             if state.spam_right.is_active() {
-                self.render_font(font, "right", (0, 50));
+                self.render_font(font, "right", (0, 80));
             }
 
             if state.spam_space.is_active() {
-                self.render_font(font, "space", (0, 100));
+                self.render_font(font, "space", (0, 110));
             }
 
             match state.detail() {
                 Detail::Idle => (),
-                Detail::Recording { .. } => self.render_font(font, "recording", (0, 0)),
-                Detail::Playing { .. } => self.render_font(font, "playing", (0, 0)),
+                Detail::Recording { .. } => self.render_font(font, "recording...", (0, 0)),
+                Detail::_Playing { .. } => self.render_font(font, "playing...", (0, 0)),
             }
 
             self.canvas.present();
 
-            println!("drawn");
+            println!("drawn {:?}", std::time::SystemTime::now());
         }
     }
 

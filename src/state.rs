@@ -1,19 +1,20 @@
-mod grid;
 mod key;
 mod spam;
 
-use grid::Grid;
+use crate::{coord::Coord, grid::Grid};
 use key::Key;
 use spam::Spam;
 use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse::{self as kam, VIRTUAL_KEY};
 
 pub struct State {
-    is_modified: bool,
+    draw_required: bool,
     key_left: Key,
     key_right: Key,
     key_space: Key,
-    key_middle: Key,
+    key_record: Key,
+    key_play: Key,
+    key_click: Key,
     pub spam_left: Spam,
     pub spam_right: Spam,
     pub spam_space: Spam,
@@ -25,7 +26,7 @@ pub enum Detail {
     Recording {
         clicks: Vec<Grid>,
     },
-    Playing {
+    _Playing {
         clicks: Vec<Option<Grid>>,
         origin: Instant,
     },
@@ -35,10 +36,15 @@ impl State {
     const KEY_LEFT: VIRTUAL_KEY = kam::VK_Z;
     const KEY_RIGHT: VIRTUAL_KEY = kam::VK_X;
     const KEY_SPACE: VIRTUAL_KEY = kam::VK_C;
-    const KEY_MIDDLE: VIRTUAL_KEY = kam::VK_MBUTTON;
+    const KEY_RECORD: VIRTUAL_KEY = kam::VK_B;
+    const KEY_PLAY: VIRTUAL_KEY = kam::VK_G;
+    const KEY_CLICK: VIRTUAL_KEY = kam::VK_LBUTTON;
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
+    const SCREENSHOTS: &str =
+        r"C:\Users\Suika\AppData\Roaming\.minecraft\versions\1.8.9-OptiFine_HD_U_M5\screenshots";
+    const RECIPES: &str = "recipes";
 
     pub fn new() -> Self {
         use crate::io::{self, MouseButton};
@@ -62,11 +68,13 @@ impl State {
         );
 
         Self {
-            is_modified: false,
+            draw_required: false,
             key_left: Key::new(Self::KEY_LEFT),
             key_right: Key::new(Self::KEY_RIGHT),
             key_space: Key::new(Self::KEY_SPACE),
-            key_middle: Key::new(Self::KEY_MIDDLE),
+            key_record: Key::new(Self::KEY_RECORD),
+            key_play: Key::new(Self::KEY_PLAY),
+            key_click: Key::new(Self::KEY_CLICK),
             spam_left,
             spam_right,
             spam_space,
@@ -74,8 +82,8 @@ impl State {
         }
     }
 
-    pub const fn is_modified(&self) -> bool {
-        self.is_modified
+    pub const fn draw_required(&self) -> bool {
+        self.draw_required
     }
 
     pub const fn detail(&self) -> &Detail {
@@ -84,16 +92,7 @@ impl State {
 
     pub fn step(&mut self) {
         self.update_keys();
-
-        let toggle = |key: &Key, spam: &mut Spam| {
-            if key.is_pressed() {
-                spam.toggle_active()
-            }
-        };
-
-        toggle(&self.key_left, &mut self.spam_left);
-        toggle(&self.key_right, &mut self.spam_right);
-        toggle(&self.key_space, &mut self.spam_space);
+        self.toggle_spams();
 
         let now = Instant::now();
 
@@ -103,33 +102,59 @@ impl State {
 
         match &mut self.detail {
             Detail::Idle => {
-                if self.key_middle.is_pressed() {
-                    self.detail = Detail::Recording { clicks: Vec::new() }
+                if self.key_record.is_pressed() {
+                    self.detail = Detail::Recording { clicks: Vec::new() };
                 }
             }
-            Detail::Recording { .. } => {
-                if self.key_middle.is_pressed() {
-                    self.detail = Detail::Idle
+            Detail::Recording { clicks } => {
+                if self.key_click.is_pressed() {
+                    let coord = Coord::from(crate::io::get_cursor());
+
+                    match coord.try_into() {
+                        Ok(grid) => clicks.push(grid),
+                        Err(e) => println!("{e}"),
+                    }
+                }
+
+                if self.key_record.is_pressed() {
+                    crate::io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, clicks);
+                    self.detail = Detail::Idle;
                 }
             }
-            Detail::Playing { .. } => (),
+            Detail::_Playing { .. } => (),
         }
     }
 
     fn update_keys(&mut self) {
-        self.is_modified = false;
+        self.draw_required = false;
 
         let mut update = |key: &mut Key| {
             key.update();
 
             if key.is_pressed() {
-                self.is_modified = true;
+                self.draw_required = true;
             }
         };
 
         update(&mut self.key_left);
         update(&mut self.key_right);
         update(&mut self.key_space);
-        update(&mut self.key_middle);
+        update(&mut self.key_record);
+        update(&mut self.key_play);
+
+        // does not count as a modification which needs redraw
+        self.key_click.update();
+    }
+
+    fn toggle_spams(&mut self) {
+        let toggle = |key: &Key, spam: &mut Spam| {
+            if key.is_pressed() {
+                spam.toggle_active();
+            }
+        };
+
+        toggle(&self.key_left, &mut self.spam_left);
+        toggle(&self.key_right, &mut self.spam_right);
+        toggle(&self.key_space, &mut self.spam_space);
     }
 }

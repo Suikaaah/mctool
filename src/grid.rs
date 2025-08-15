@@ -1,7 +1,7 @@
-mod coord;
+use crate::coord::Coord;
+use serde::{Deserialize, Serialize};
 
-use coord::Coord;
-
+#[derive(Serialize, Deserialize)]
 pub enum Grid {
     Table(u8, u8),
     Craft,
@@ -26,10 +26,10 @@ impl Grid {
     }
 }
 
-impl TryFrom<&Coord> for Grid {
+impl TryFrom<Coord> for Grid {
     type Error = &'static str;
 
-    fn try_from(value: &Coord) -> Result<Self, Self::Error> {
+    fn try_from(value: Coord) -> Result<Self, Self::Error> {
         let f = |origin| {
             let Coord(x, y) = value.sub(origin).ediv(Self::GRID_SIZE);
             (x as u8, y as u8)
