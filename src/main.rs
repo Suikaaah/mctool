@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod coord;
 mod engine;
 mod font_engine;

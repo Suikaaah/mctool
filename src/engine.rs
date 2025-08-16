@@ -29,7 +29,7 @@ impl Engine {
     const WIDTH: u32 = io::INV_WIDTH + io::ITEM_WIDTH + Self::PADDING * 3;
     const HEIGHT: u32 = io::INV_HEIGHT + Self::PADDING * 2 + Self::TAB_HEIGHT;
     const CENTER: (i32, i32) = (Self::WIDTH as i32 / 2, Self::HEIGHT as i32 / 2);
-    const TAB_WIDTH: u32 = 100;
+    const TAB_WIDTH: u32 = 110;
     const TAB_HEIGHT: u32 = 24;
     const POLLING_RATE: Duration = Duration::from_millis(1);
     const BACKGROUND: Color = Color::RGB(0x4F, 0x4F, 0x4F);
@@ -131,7 +131,11 @@ impl Engine {
 
             self.render_font_centered(
                 font,
-                "LOCKED",
+                if state.is_locked() {
+                    "LOCKED"
+                } else {
+                    "UNLOCKED"
+                },
                 (
                     Self::WIDTH as i32 - Self::TAB_WIDTH as i32 / 2,
                     Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32 / 2,
