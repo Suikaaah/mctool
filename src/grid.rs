@@ -62,7 +62,7 @@ impl From<&Grid> for Coord {
 
         match value {
             Grid::Table(x, y) => f(Grid::ORIGIN_TABLE, *x, *y),
-            Grid::Craft => Grid::ORIGIN_CRAFT,
+            Grid::Craft => f(Grid::ORIGIN_CRAFT, 0, 0),
             Grid::Inv(x, y) => f(Grid::ORIGIN_INV, *x, *y),
             Grid::Hotbar(x) => f(Grid::ORIGIN_HOTBAR, *x, 0),
         }

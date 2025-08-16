@@ -1,6 +1,6 @@
 mod key;
 mod recipes;
-mod spam;
+pub mod spam;
 
 use crate::{coord::Coord, grid::Grid, io, state::recipes::Recipes};
 use key::Key;
@@ -54,7 +54,7 @@ impl State {
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
-    const INT_PLAY: Duration = Duration::from_millis(100);
+    const INT_PLAY: Duration = Duration::from_millis(7);
     const SCREENSHOTS: &str =
         r"C:\Users\Suika\AppData\Roaming\.minecraft\versions\1.8.9-OptiFine_HD_U_M5\screenshots";
     const RECIPES: &str = "recipes";
@@ -162,21 +162,27 @@ impl State {
                 let index =
                     (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
 
-                match clicks.get_mut(index) {
+                match clicks.get_mut(index / 2) {
                     None => {
                         self.detail = Detail::Idle;
                         self.draw_required = true;
                     }
-                    Some((grid, click)) => match click {
-                        Click::New => {
-                            grid.set_cursor();
-                            *click = Click::Moved;
+                    Some(opt) => match opt {
+                        (grid, click @ Click::New) => {
+                            if index & 1 == 0 {
+                                println!("cursor set");
+                                grid.set_cursor();
+                                *click = Click::Moved;
+                            }
                         }
-                        Click::Moved => {
-                            io::send_mouse(io::MouseButton::Left);
-                            *click = Click::Clicked;
+                        (_, click @ Click::Moved) => {
+                            if index & 1 == 1 {
+                                println!("left clicked");
+                                io::send_mouse(io::MouseButton::Left);
+                                *click = Click::Clicked;
+                            }
                         }
-                        Click::Clicked => (),
+                        (_, Click::Clicked) => (),
                     },
                 }
             }

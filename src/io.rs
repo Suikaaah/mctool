@@ -10,7 +10,10 @@ use windows::Win32::UI::WindowsAndMessaging as wam;
 
 pub const INV_WIDTH: u32 = 486;
 pub const INV_HEIGHT: u32 = 228;
+pub const ITEM_WIDTH: u32 = 78;
+pub const ITEM_HEIGHT: u32 = 78;
 pub const FILENAME_THUMBNAIL: &str = "thumbnail.png";
+pub const FILENAME_ITEM: &str = "item.png";
 pub const FILENAME_CLICKS: &str = "clicks.json";
 
 type WinResult<T> = windows::core::Result<T>;
@@ -155,7 +158,11 @@ where
 
     serde_json::to_writer(json, clicks).expect("failed to write json");
 
-    crop_latest_png(screenshots, dir.join(FILENAME_THUMBNAIL));
+    crop_latest_png(
+        screenshots,
+        dir.join(FILENAME_THUMBNAIL),
+        dir.join(FILENAME_ITEM),
+    );
 }
 
 pub fn load_clicks(path: impl AsRef<Path>) -> Box<[Grid]> {
@@ -171,30 +178,46 @@ pub fn recipes(recipes: impl AsRef<Path>) -> Box<[PathBuf]> {
         .collect()
 }
 
-fn crop_latest_png(search_in: impl AsRef<Path>, dst: impl AsRef<Path>) {
-    match get_latest_png(search_in) {
-        Some(path) => {
-            let mut image = ImageReader::open(path)
+fn crop_latest_png<P, Q, R>(search_in: P, dst_inv: Q, dst_item: R)
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+    R: AsRef<Path>,
+{
+    match get_latest_pngs(search_in) {
+        Some((path_inv, path_item)) => {
+            let mut image_inv = ImageReader::open(path_inv)
                 .expect("failed to open image")
                 .decode()
                 .expect("failed to decode image");
 
-            image
+            let mut image_item = ImageReader::open(path_item)
+                .expect("failed to open image")
+                .decode()
+                .expect("failed to decode image");
+
+            image_inv
                 .crop(717, 540, INV_WIDTH, INV_HEIGHT)
-                .save(dst)
+                .save(dst_inv)
+                .expect("failed to save image");
+
+            image_item
+                .crop(1053, 381, ITEM_WIDTH, ITEM_HEIGHT)
+                .save(dst_item)
                 .expect("failed to save image");
         }
         None => println!("directory or image not found"),
     }
 }
 
-fn get_latest_png(path: impl AsRef<Path>) -> Option<PathBuf> {
+// (second latest, most latest)
+fn get_latest_pngs(path: impl AsRef<Path>) -> Option<(PathBuf, PathBuf)> {
     struct Entry {
         modified: SystemTime,
         path: PathBuf,
     }
 
-    std::fs::read_dir(path)
+    let mut entries: Box<[Entry]> = std::fs::read_dir(path)
         .ok()?
         .filter_map(Result::ok)
         .filter_map(|entry| {
@@ -212,8 +235,12 @@ fn get_latest_png(path: impl AsRef<Path>) -> Option<PathBuf> {
                 .map(|ext| ext.eq_ignore_ascii_case("png"))
                 .unwrap_or(false)
         })
-        .max_by_key(|entry| entry.modified)
-        .map(|entry| entry.path)
+        .collect();
+
+    entries.sort_unstable_by_key(|entry| entry.modified);
+    entries
+        .last_chunk::<2>()
+        .map(|[a, b]| (a.path.clone(), b.path.clone()))
 }
 
 fn send_inputs(inputs: &[INPUT]) {

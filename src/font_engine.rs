@@ -5,6 +5,8 @@ pub struct FontEngine {
 }
 
 impl FontEngine {
+    const FONT: &str = "CascadiaMono.ttf";
+
     pub fn new() -> Self {
         Self {
             context: sdl2::ttf::init().expect("failed to initialize ttf"),
@@ -12,6 +14,6 @@ impl FontEngine {
     }
 
     pub fn load_font(&self, point_size: u16) -> Result<Font<'_, 'static>, String> {
-        self.context.load_font("consola.ttf", point_size)
+        self.context.load_font(Self::FONT, point_size)
     }
 }

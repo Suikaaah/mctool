@@ -1,6 +1,6 @@
 use crate::{
     io,
-    state::{Detail, State},
+    state::{Detail, State, spam::Spam},
 };
 use sdl2::{
     EventPump, Sdl,
@@ -25,12 +25,16 @@ pub struct Engine {
 
 impl Engine {
     const TITLE: &str = "mctool";
-    const PADDING: u32 = 16;
-    const PADDING_BOTTOM: u32 = 48;
-    const WIDTH: u32 = io::INV_WIDTH + Self::PADDING * 2;
-    const HEIGHT: u32 = io::INV_HEIGHT + Self::PADDING * 2 + Self::PADDING_BOTTOM;
-    const POLLING_RATE: Duration = Duration::from_millis(2);
+    const PADDING: u32 = 48;
+    const WIDTH: u32 = io::INV_WIDTH + io::ITEM_WIDTH + Self::PADDING * 3;
+    const HEIGHT: u32 = io::INV_HEIGHT + Self::PADDING * 2 + Self::TAB_HEIGHT;
+    const CENTER: (i32, i32) = (Self::WIDTH as i32 / 2, Self::HEIGHT as i32 / 2);
+    const TAB_WIDTH: u32 = 100;
+    const TAB_HEIGHT: u32 = 24;
+    const INDEX_WIDTH: u32 = 150;
+    const POLLING_RATE: Duration = Duration::from_millis(1);
     const BACKGROUND: Color = Color::RGB(0x4F, 0x4F, 0x4F);
+    const TAB_BACKGROUND: Color = Color::RGB(0x38, 0x38, 0x38);
 
     pub fn new() -> Self {
         let context = sdl2::init().expect("failed to initialize sdl2");
@@ -70,43 +74,70 @@ impl Engine {
             self.canvas.set_draw_color(Self::BACKGROUND);
             self.canvas.clear();
 
-            if let Some(path) = state.recipes.get() {
-                let texture = self
-                    .tex_creator
-                    .load_texture(path.join(io::FILENAME_THUMBNAIL))
-                    .expect("failed to create texture");
+            match state.detail() {
+                Detail::Idle => self.render_thumbnail(state),
+                Detail::Recording { .. } => {
+                    self.render_font_centered(font, "Recording...", Self::CENTER, Color::WHITE)
+                }
+                Detail::Playing { .. } => {
+                    self.render_font_centered(font, "Playing...", Self::CENTER, Color::WHITE)
+                }
+            }
 
-                let query = texture.query();
+            let mut tab = |i, text, spam: &Spam| {
+                let y = Self::HEIGHT - Self::TAB_HEIGHT;
+                let cx = Self::TAB_WIDTH as i32 * i + Self::TAB_WIDTH as i32 / 2;
+                let cy = Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32 / 2;
 
-                let dst = Rect::new(
-                    Self::PADDING as i32,
-                    Self::PADDING as i32,
-                    query.width,
-                    query.height,
+                self.draw_rect(
+                    Rect::new(
+                        Self::TAB_WIDTH as i32 * i,
+                        y as i32,
+                        Self::TAB_WIDTH,
+                        Self::TAB_HEIGHT,
+                    ),
+                    if spam.is_active() {
+                        Color::GREEN
+                    } else {
+                        Self::TAB_BACKGROUND
+                    },
                 );
 
-                self.canvas
-                    .copy(&texture, None, dst)
-                    .expect("failed to copy to canvas");
-            }
+                self.render_font_centered(
+                    font,
+                    text,
+                    (cx, cy),
+                    if spam.is_active() {
+                        Self::TAB_BACKGROUND
+                    } else {
+                        Color::WHITE
+                    },
+                );
+            };
 
-            if state.spam_left.is_active() {
-                self.render_font(font, "left", (0, 50));
-            }
+            tab(0, "LEFT", &state.spam_left);
+            tab(1, "RIGHT", &state.spam_right);
+            tab(2, "SPACE", &state.spam_space);
 
-            if state.spam_right.is_active() {
-                self.render_font(font, "right", (0, 80));
-            }
+            self.draw_rect(
+                Rect::new(
+                    Self::WIDTH as i32 - Self::INDEX_WIDTH as i32,
+                    Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32,
+                    Self::INDEX_WIDTH,
+                    Self::TAB_HEIGHT,
+                ),
+                Self::TAB_BACKGROUND,
+            );
 
-            if state.spam_space.is_active() {
-                self.render_font(font, "space", (0, 110));
-            }
-
-            match state.detail() {
-                Detail::Idle => (),
-                Detail::Recording { .. } => self.render_font(font, "recording...", (0, 0)),
-                Detail::Playing { .. } => self.render_font(font, "playing...", (0, 0)),
-            }
+            self.render_font_centered(
+                font,
+                state.recipes.to_string().as_str(),
+                (
+                    Self::WIDTH as i32 - Self::INDEX_WIDTH as i32 / 2,
+                    Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32 / 2,
+                ),
+                Color::WHITE,
+            );
 
             self.canvas.present();
 
@@ -118,13 +149,57 @@ impl Engine {
         std::thread::sleep(Self::POLLING_RATE);
     }
 
-    fn render_font(&mut self, font: &Font, text: &str, position: (i32, i32)) {
+    fn render_thumbnail(&mut self, state: &State) {
+        if let Some(path) = state.recipes.get() {
+            {
+                let texture = self
+                    .tex_creator
+                    .load_texture(path.join(io::FILENAME_THUMBNAIL))
+                    .expect("failed to create texture");
+
+                let dst = Rect::new(
+                    Self::PADDING as i32,
+                    Self::PADDING as i32,
+                    io::INV_WIDTH,
+                    io::INV_HEIGHT,
+                );
+
+                self.canvas
+                    .copy(&texture, None, dst)
+                    .expect("failed to copy to canvas");
+            }
+            {
+                let texture = self
+                    .tex_creator
+                    .load_texture(path.join(io::FILENAME_ITEM))
+                    .expect("failed to create texture");
+
+                let dst = Rect::new(
+                    Self::WIDTH as i32 - Self::PADDING as i32 - io::ITEM_WIDTH as i32,
+                    Self::PADDING as i32 + io::INV_HEIGHT as i32 / 2 - io::ITEM_HEIGHT as i32 / 2,
+                    io::ITEM_WIDTH,
+                    io::ITEM_HEIGHT,
+                );
+
+                self.canvas
+                    .copy(&texture, None, dst)
+                    .expect("failed to copy to canvas");
+            }
+        }
+    }
+
+    fn render_font_centered(&mut self, font: &Font, text: &str, (x, y): (i32, i32), color: Color) {
         let surface = font
             .render(text)
-            .blended(Color::WHITE)
+            .blended(color)
             .expect("failed to render text");
 
-        self.draw_surface(surface, position);
+        let center = (
+            x - surface.width() as i32 / 2,
+            y - surface.height() as i32 / 2,
+        );
+
+        self.draw_surface(surface, center);
     }
 
     fn draw_surface(&mut self, surface: Surface, (x, y): (i32, i32)) {
@@ -139,5 +214,10 @@ impl Engine {
                 Rect::new(x, y, surface.width(), surface.height()),
             )
             .expect("failed to copy to canvas");
+    }
+
+    fn draw_rect(&mut self, rect: Rect, color: Color) {
+        self.canvas.set_draw_color(color);
+        self.canvas.fill_rect(rect).expect("failed to fill rect");
     }
 }
