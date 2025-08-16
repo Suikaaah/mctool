@@ -16,8 +16,6 @@ pub const FILENAME_THUMBNAIL: &str = "thumbnail.png";
 pub const FILENAME_ITEM: &str = "item.png";
 pub const FILENAME_CLICKS: &str = "clicks.json";
 
-type WinResult<T> = windows::core::Result<T>;
-
 pub enum MouseButton {
     Left,
     Right,
@@ -30,17 +28,13 @@ pub fn is_down(vkey: VIRTUAL_KEY) -> bool {
 pub fn get_cursor() -> (i32, i32) {
     let mut point = windows::Win32::Foundation::POINT::default();
 
-    if let WinResult::Err(e) = unsafe { wam::GetCursorPos(&mut point) } {
-        println!("{e}");
-    }
+    unsafe { wam::GetCursorPos(&mut point) }.expect("failed to get cursor position");
 
     (point.x, point.y)
 }
 
 pub fn set_cursor(x: i32, y: i32) {
-    if let WinResult::Err(e) = unsafe { wam::SetCursorPos(x, y) } {
-        println!("{e}");
-    }
+    unsafe { wam::SetCursorPos(x, y) }.expect("failed to set cursor position")
 }
 
 pub fn send_key_down(vkey: VIRTUAL_KEY) {
@@ -184,30 +178,27 @@ where
     Q: AsRef<Path>,
     R: AsRef<Path>,
 {
-    match get_latest_pngs(search_in) {
-        Some((path_inv, path_item)) => {
-            let mut image_inv = ImageReader::open(path_inv)
-                .expect("failed to open image")
-                .decode()
-                .expect("failed to decode image");
+    let (path_inv, path_item) = get_latest_pngs(search_in).expect("directory or image not found");
 
-            let mut image_item = ImageReader::open(path_item)
-                .expect("failed to open image")
-                .decode()
-                .expect("failed to decode image");
+    let mut image_inv = ImageReader::open(path_inv)
+        .expect("failed to open image")
+        .decode()
+        .expect("failed to decode image");
 
-            image_inv
-                .crop(717, 540, INV_WIDTH, INV_HEIGHT)
-                .save(dst_inv)
-                .expect("failed to save image");
+    let mut image_item = ImageReader::open(path_item)
+        .expect("failed to open image")
+        .decode()
+        .expect("failed to decode image");
 
-            image_item
-                .crop(1053, 381, ITEM_WIDTH, ITEM_HEIGHT)
-                .save(dst_item)
-                .expect("failed to save image");
-        }
-        None => println!("directory or image not found"),
-    }
+    image_inv
+        .crop(717, 540, INV_WIDTH, INV_HEIGHT)
+        .save(dst_inv)
+        .expect("failed to save image");
+
+    image_item
+        .crop(1053, 381, ITEM_WIDTH, ITEM_HEIGHT)
+        .save(dst_item)
+        .expect("failed to save image");
 }
 
 // (second latest, most latest)

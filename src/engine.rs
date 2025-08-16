@@ -1,6 +1,6 @@
 use crate::{
     io,
-    state::{Detail, State, spam::Spam},
+    state::{Detail, State},
 };
 use sdl2::{
     EventPump, Sdl,
@@ -82,9 +82,12 @@ impl Engine {
                 Detail::Playing { .. } => {
                     self.render_font_centered(font, "Playing...", Self::CENTER, Color::WHITE)
                 }
+                Detail::TradingFirst { .. } | Detail::TradingSecond { .. } => {
+                    self.render_font_centered(font, "Trading...", Self::CENTER, Color::WHITE)
+                }
             }
 
-            let mut tab = |i, text, spam: &Spam| {
+            let mut tab = |i, text, is_active| {
                 let y = Self::HEIGHT - Self::TAB_HEIGHT;
                 let cx = Self::TAB_WIDTH as i32 * i + Self::TAB_WIDTH as i32 / 2;
                 let cy = Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32 / 2;
@@ -96,7 +99,7 @@ impl Engine {
                         Self::TAB_WIDTH,
                         Self::TAB_HEIGHT,
                     ),
-                    if spam.is_active() {
+                    if is_active {
                         Color::GREEN
                     } else {
                         Self::TAB_BACKGROUND
@@ -107,7 +110,7 @@ impl Engine {
                     font,
                     text,
                     (cx, cy),
-                    if spam.is_active() {
+                    if is_active {
                         Self::TAB_BACKGROUND
                     } else {
                         Color::WHITE
@@ -115,9 +118,10 @@ impl Engine {
                 );
             };
 
-            tab(0, "LEFT", &state.spam_left);
-            tab(1, "RIGHT", &state.spam_right);
-            tab(2, "SPACE", &state.spam_space);
+            tab(0, "DOUBLE", state.double_click_active());
+            tab(1, "LEFT", state.spam_left.is_active());
+            tab(2, "RIGHT", state.spam_right.is_active());
+            tab(3, "SPACE", state.spam_space.is_active());
 
             self.draw_rect(
                 Rect::new(
@@ -140,8 +144,6 @@ impl Engine {
             );
 
             self.canvas.present();
-
-            println!("drawn {:?}", std::time::SystemTime::now());
         }
     }
 
