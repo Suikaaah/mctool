@@ -56,8 +56,8 @@ impl Display for Recipes {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let str = self
             .index
-            .map(|i| format!("{} of {}", i + 1, self.recipes.len()))
-            .unwrap_or_else(|| String::from("NO RECIPES"));
+            .map(|i| format!("{} / {}", i + 1, self.recipes.len()))
+            .unwrap_or_else(|| String::from("no recipes"));
 
         write!(f, "{str}")
     }

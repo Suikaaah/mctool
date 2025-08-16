@@ -11,7 +11,7 @@ fn main() {
     let mut engine = Engine::new();
     let mut state = State::new();
     let font_engine = FontEngine::new();
-    let font = font_engine.load_font(18).expect("failed to load font");
+    let font = font_engine.load_font(16).expect("failed to load font");
 
     'main_loop: loop {
         while let Some(event) = engine.poll_event() {

@@ -23,6 +23,7 @@ pub struct State {
     key_begin_trade: Key,
     key_end_trade: Key,
     key_abort: Key,
+    key_lock: Key,
     pub spam_left: Spam,
     pub spam_right: Spam,
     pub spam_space: Spam,
@@ -30,6 +31,7 @@ pub struct State {
     pub recipes: Recipes,
     double_click_active: bool,
     double_click_origin: Option<Instant>,
+    is_locked: bool,
 }
 
 pub enum Detail {
@@ -80,12 +82,13 @@ impl State {
     const KEY_PLAY: VIRTUAL_KEY = kam::VK_G;
     const KEY_CLICK: VIRTUAL_KEY = kam::VK_LBUTTON;
     const KEY_RIGHT_CLICK: VIRTUAL_KEY = kam::VK_RBUTTON;
-    const KEY_PREV: VIRTUAL_KEY = kam::VK_XBUTTON1;
-    const KEY_NEXT: VIRTUAL_KEY = kam::VK_XBUTTON2;
+    const KEY_PREV: VIRTUAL_KEY = kam::VK_XBUTTON2;
+    const KEY_NEXT: VIRTUAL_KEY = kam::VK_XBUTTON1;
     const KEY_DOUBLE_CLICK: VIRTUAL_KEY = kam::VK_TAB;
     const KEY_BEGIN_TRADE: VIRTUAL_KEY = kam::VK_R;
     const KEY_END_TRADE: VIRTUAL_KEY = kam::VK_LSHIFT;
     const KEY_ABORT: VIRTUAL_KEY = kam::VK_OEM_3;
+    const KEYS_LOCK: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, kam::VK_MBUTTON];
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
@@ -118,19 +121,20 @@ impl State {
 
         Self {
             draw_required: false,
-            key_left: Key::new(Self::KEY_LEFT),
-            key_right: Key::new(Self::KEY_RIGHT),
-            key_space: Key::new(Self::KEY_SPACE),
-            key_record: Key::new(Self::KEY_RECORD),
-            key_play: Key::new(Self::KEY_PLAY),
-            key_click: Key::new(Self::KEY_CLICK),
-            key_right_click: Key::new(Self::KEY_RIGHT_CLICK),
-            key_prev: Key::new(Self::KEY_PREV),
-            key_next: Key::new(Self::KEY_NEXT),
-            key_double_click: Key::new(Self::KEY_DOUBLE_CLICK),
-            key_begin_trade: Key::new(Self::KEY_BEGIN_TRADE),
-            key_end_trade: Key::new(Self::KEY_END_TRADE),
-            key_abort: Key::new(Self::KEY_ABORT),
+            key_left: Key::new(vec![Self::KEY_LEFT]),
+            key_right: Key::new(vec![Self::KEY_RIGHT]),
+            key_space: Key::new(vec![Self::KEY_SPACE]),
+            key_record: Key::new(vec![Self::KEY_RECORD]),
+            key_play: Key::new(vec![Self::KEY_PLAY]),
+            key_click: Key::new(vec![Self::KEY_CLICK]),
+            key_right_click: Key::new(vec![Self::KEY_RIGHT_CLICK]),
+            key_prev: Key::new(vec![Self::KEY_PREV]),
+            key_next: Key::new(vec![Self::KEY_NEXT]),
+            key_double_click: Key::new(vec![Self::KEY_DOUBLE_CLICK]),
+            key_begin_trade: Key::new(vec![Self::KEY_BEGIN_TRADE]),
+            key_end_trade: Key::new(vec![Self::KEY_END_TRADE]),
+            key_abort: Key::new(vec![Self::KEY_ABORT]),
+            key_lock: Key::new(Self::KEYS_LOCK.into()),
             spam_left,
             spam_right,
             spam_space,
@@ -138,6 +142,7 @@ impl State {
             recipes: Recipes::new(io::recipes(Self::RECIPES)),
             double_click_active: false,
             double_click_origin: None,
+            is_locked: false,
         }
     }
 
@@ -149,11 +154,17 @@ impl State {
         &self.detail
     }
 
+    pub const fn is_locked(&self) -> bool {
+        self.is_locked
+    }
+
     pub fn step(&mut self) {
         self.update_keys();
         self.toggle_spams();
 
-        let now = Instant::now();
+        if self.key_lock.is_pressed() {
+            self.is_locked ^= true;
+        }
 
         if self.key_abort.is_pressed() {
             self.detail = Detail::Idle;
@@ -164,7 +175,7 @@ impl State {
         }
 
         if self.double_click_active && self.key_right_click.is_pressed() {
-            self.double_click_origin = Some(now);
+            self.double_click_origin = Some(Instant::now());
         }
 
         if let Some(instant) = self.double_click_origin
@@ -174,9 +185,13 @@ impl State {
             self.double_click_origin = None;
         }
 
-        self.spam_left.step(now);
-        self.spam_right.step(now);
-        self.spam_space.step(now);
+        {
+            let now = Instant::now();
+
+            self.spam_left.step(now);
+            self.spam_right.step(now);
+            self.spam_space.step(now);
+        }
 
         match &mut self.detail {
             Detail::Idle => {
@@ -194,7 +209,7 @@ impl State {
                     self.detail = Detail::TradingFirst {
                         state: TradeFirst::InvClicked,
                         position: io::get_cursor(),
-                        origin: now,
+                        origin: Instant::now(), // lag-aware
                     };
                 }
 
@@ -210,7 +225,7 @@ impl State {
                             .into_iter()
                             .map(|grid| (grid, Click::New))
                             .collect(),
-                        origin: now,
+                        origin: Instant::now(), // lag-aware
                     };
                 }
             }
@@ -289,7 +304,7 @@ impl State {
                             self.detail = Detail::TradingSecond {
                                 state: TradeSecond::RightClicked,
                                 position: *position,
-                                origin: now,
+                                origin: Instant::now(),
                             };
                         }
                     }
@@ -343,21 +358,25 @@ impl State {
             }
         };
 
-        update(&mut self.key_left);
-        update(&mut self.key_right);
-        update(&mut self.key_space);
-        update(&mut self.key_record);
-        update(&mut self.key_play);
-        update(&mut self.key_prev);
-        update(&mut self.key_next);
-        update(&mut self.key_double_click);
-        update(&mut self.key_begin_trade);
-        update(&mut self.key_end_trade);
-        update(&mut self.key_abort);
+        update(&mut self.key_lock);
 
         // does not count as a modification which needs redraw
         self.key_click.update();
         self.key_right_click.update();
+
+        if !self.is_locked {
+            update(&mut self.key_left);
+            update(&mut self.key_right);
+            update(&mut self.key_space);
+            update(&mut self.key_record);
+            update(&mut self.key_play);
+            update(&mut self.key_prev);
+            update(&mut self.key_next);
+            update(&mut self.key_double_click);
+            update(&mut self.key_begin_trade);
+            update(&mut self.key_end_trade);
+            update(&mut self.key_abort);
+        }
     }
 
     fn toggle_spams(&mut self) {

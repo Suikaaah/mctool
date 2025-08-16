@@ -25,16 +25,17 @@ pub struct Engine {
 
 impl Engine {
     const TITLE: &str = "mctool";
-    const PADDING: u32 = 48;
+    const PADDING: u32 = 32;
     const WIDTH: u32 = io::INV_WIDTH + io::ITEM_WIDTH + Self::PADDING * 3;
     const HEIGHT: u32 = io::INV_HEIGHT + Self::PADDING * 2 + Self::TAB_HEIGHT;
     const CENTER: (i32, i32) = (Self::WIDTH as i32 / 2, Self::HEIGHT as i32 / 2);
     const TAB_WIDTH: u32 = 100;
     const TAB_HEIGHT: u32 = 24;
-    const INDEX_WIDTH: u32 = 150;
     const POLLING_RATE: Duration = Duration::from_millis(1);
     const BACKGROUND: Color = Color::RGB(0x4F, 0x4F, 0x4F);
     const TAB_BACKGROUND: Color = Color::RGB(0x38, 0x38, 0x38);
+    const GREEN: Color = Color::RGB(0x00, 0x7F, 0x00);
+    const RED: Color = Color::RGB(0x7F, 0x00, 0x00);
 
     pub fn new() -> Self {
         let context = sdl2::init().expect("failed to initialize sdl2");
@@ -100,22 +101,13 @@ impl Engine {
                         Self::TAB_HEIGHT,
                     ),
                     if is_active {
-                        Color::GREEN
+                        Self::GREEN
                     } else {
                         Self::TAB_BACKGROUND
                     },
                 );
 
-                self.render_font_centered(
-                    font,
-                    text,
-                    (cx, cy),
-                    if is_active {
-                        Self::TAB_BACKGROUND
-                    } else {
-                        Color::WHITE
-                    },
-                );
+                self.render_font_centered(font, text, (cx, cy), Color::WHITE);
             };
 
             tab(0, "DOUBLE", state.double_click_active());
@@ -125,23 +117,32 @@ impl Engine {
 
             self.draw_rect(
                 Rect::new(
-                    Self::WIDTH as i32 - Self::INDEX_WIDTH as i32,
+                    Self::WIDTH as i32 - Self::TAB_WIDTH as i32,
                     Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32,
-                    Self::INDEX_WIDTH,
+                    Self::TAB_WIDTH,
                     Self::TAB_HEIGHT,
                 ),
-                Self::TAB_BACKGROUND,
+                if state.is_locked() {
+                    Self::RED
+                } else {
+                    Self::TAB_BACKGROUND
+                },
             );
 
             self.render_font_centered(
                 font,
-                state.recipes.to_string().as_str(),
+                "LOCKED",
                 (
-                    Self::WIDTH as i32 - Self::INDEX_WIDTH as i32 / 2,
+                    Self::WIDTH as i32 - Self::TAB_WIDTH as i32 / 2,
                     Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32 / 2,
                 ),
                 Color::WHITE,
             );
+
+            self.canvas
+                .window_mut()
+                .set_title(&format!("mctool [{}]", state.recipes))
+                .expect("failed to set title");
 
             self.canvas.present();
         }
