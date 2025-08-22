@@ -7,13 +7,13 @@ mod grid;
 mod io;
 mod state;
 
-fn main() {
+fn main_detail() -> anyhow::Result<()> {
     use {engine::Engine, font_engine::FontEngine, state::State};
 
-    let mut engine = Engine::new();
-    let mut state = State::new();
-    let font_engine = FontEngine::new();
-    let font = font_engine.load_font(16).expect("failed to load font");
+    let mut engine = Engine::new()?;
+    let mut state = State::new()?;
+    let font_engine = FontEngine::new()?;
+    let font = font_engine.load_font(16)?;
 
     'main_loop: loop {
         while let Some(event) = engine.poll_event() {
@@ -22,8 +22,17 @@ fn main() {
             }
         }
 
-        state.step();
-        engine.draw(&state, &font);
+        state.step()?;
+        engine.draw(&state, &font)?;
         Engine::sleep();
+    }
+
+    Ok(())
+}
+
+fn main() {
+    if let Err(e) = main_detail() {
+        io::message_box(format!("Reason: {e}"), "Program Terminated")
+            .expect("failed to show message box");
     }
 }

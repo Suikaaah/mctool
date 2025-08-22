@@ -1,31 +1,32 @@
-use std::{
-    fmt::{Display, Formatter},
-    path::PathBuf,
-};
+use anyhow::{Result, anyhow};
+use std::{fmt, path::PathBuf};
 
 pub struct Recipes {
-    recipes: Box<[PathBuf]>,
+    paths: Box<[PathBuf]>,
     index: Option<usize>,
 }
 
 impl Recipes {
-    pub const fn new(recipes: Box<[PathBuf]>) -> Self {
-        let index = Self::last_index(&recipes);
+    pub const fn new(paths: Box<[PathBuf]>) -> Self {
+        let index = Self::last_index(&paths);
 
-        Self { recipes, index }
+        Self { paths, index }
     }
 
-    pub fn get(&self) -> Option<&PathBuf> {
-        self.index.map(|i| {
-            self.recipes
-                .get(i)
-                .expect("this should be unreachable. check your code")
-        })
+    pub fn get_path(&self) -> Result<Option<&PathBuf>> {
+        match self.index {
+            None => Ok(None),
+            Some(index) => self
+                .paths
+                .get(index)
+                .ok_or_else(|| anyhow!("this should not be reachable. "))
+                .map(Option::Some),
+        }
     }
 
     pub const fn increment(&mut self) {
         if let Some(index) = &mut self.index {
-            *index = if *index + 1 == self.recipes.len() {
+            *index = if *index + 1 == self.paths.len() {
                 0
             } else {
                 *index + 1
@@ -36,7 +37,8 @@ impl Recipes {
     pub const fn decrement(&mut self) {
         if let Some(index) = &mut self.index {
             *index = if *index == 0 {
-                self.recipes.len() - 1
+                // since paths' length is fixed, len is always non-zero
+                self.paths.len() - 1
             } else {
                 *index - 1
             };
@@ -44,20 +46,19 @@ impl Recipes {
     }
 
     const fn last_index<T>(value: &[T]) -> Option<usize> {
-        if value.is_empty() {
-            None
-        } else {
-            Some(value.len() - 1)
+        match value.len() {
+            0 => None,
+            len => Some(len - 1),
         }
     }
 }
 
-impl Display for Recipes {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Recipes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = self
             .index
-            .map(|i| format!("{} / {}", i + 1, self.recipes.len()))
-            .unwrap_or_else(|| String::from("no recipes"));
+            .map(|i| format!("{} / {}", i + 1, self.paths.len()))
+            .unwrap_or_else(|| String::from("no recipes found"));
 
         write!(f, "{str}")
     }

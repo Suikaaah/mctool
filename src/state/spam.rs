@@ -10,10 +10,10 @@ pub struct Spam {
 }
 
 impl Spam {
-    pub fn new<F, G>(interval: Duration, on_down: F, on_up: G) -> Self
+    pub fn new<F1, F2>(interval: Duration, on_down: F1, on_up: F2) -> Self
     where
-        F: Fn() + 'static,
-        G: Fn() + 'static,
+        F1: Fn() + 'static,
+        F2: Fn() + 'static,
     {
         Self {
             is_active: false,
@@ -27,10 +27,6 @@ impl Spam {
 
     pub const fn is_active(&self) -> bool {
         self.is_active
-    }
-
-    pub const fn _set_active(&mut self, value: bool) {
-        self.is_active = value
     }
 
     pub const fn toggle_active(&mut self) {

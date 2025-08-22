@@ -1,5 +1,5 @@
 use crate::grid::Grid;
-use image::ImageReader;
+use anyhow::{Result, anyhow};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -25,16 +25,18 @@ pub fn is_down(vkey: VIRTUAL_KEY) -> bool {
     unsafe { kam::GetAsyncKeyState(vkey.0 as i32) }.cast_unsigned() >> 15 != 0
 }
 
-pub fn get_cursor() -> (i32, i32) {
+pub fn get_cursor() -> Result<(i32, i32)> {
     let mut point = windows::Win32::Foundation::POINT::default();
 
-    unsafe { wam::GetCursorPos(&mut point) }.expect("failed to get cursor position");
+    unsafe {
+        wam::GetCursorPos(&mut point)?;
+    }
 
-    (point.x, point.y)
+    Ok((point.x, point.y))
 }
 
-pub fn set_cursor(x: i32, y: i32) {
-    unsafe { wam::SetCursorPos(x, y) }.expect("failed to set cursor position")
+pub fn set_cursor(x: i32, y: i32) -> Result<()> {
+    Ok(unsafe { wam::SetCursorPos(x, y) }?)
 }
 
 pub fn send_key_down(vkey: VIRTUAL_KEY) {
@@ -133,83 +135,79 @@ pub fn send_mouse(button: MouseButton) {
     send_inputs(&[down, up]);
 }
 
-pub fn save_clicks<P, Q>(screenshots: P, recipes: Q, clicks: &[Grid])
+pub fn save_clicks<P, Q>(screenshots: P, recipes: Q, clicks: &[Grid]) -> Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
 {
     let timestamp = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("failed to obtain duration")
+        .duration_since(std::time::UNIX_EPOCH)?
         .as_secs()
         .to_string();
 
     let dir = recipes.as_ref().join(timestamp);
 
-    std::fs::create_dir(&dir).expect("failed to create directory");
+    std::fs::create_dir(&dir)?;
 
-    let json = File::create_new(dir.join(FILENAME_CLICKS)).expect("failed to create json");
+    let json = File::create_new(dir.join(FILENAME_CLICKS))?;
 
-    serde_json::to_writer(json, clicks).expect("failed to write json");
+    serde_json::to_writer(json, clicks)?;
 
     crop_latest_png(
         screenshots,
         dir.join(FILENAME_THUMBNAIL),
         dir.join(FILENAME_ITEM),
-    );
+    )?;
+
+    Ok(())
 }
 
-pub fn load_clicks(path: impl AsRef<Path>) -> Box<[Grid]> {
-    let file = std::fs::File::open(path).expect("failed to open file");
-    serde_json::from_reader(file).expect("failed to parse json")
+pub fn load_clicks(path: impl AsRef<Path>) -> Result<Box<[Grid]>> {
+    let file = File::open(path)?;
+    Ok(serde_json::from_reader(file)?)
 }
 
-pub fn recipes(recipes: impl AsRef<Path>) -> Box<[PathBuf]> {
-    std::fs::read_dir(recipes)
-        .expect("failed to read directory")
+pub fn recipes(recipes: impl AsRef<Path>) -> Result<Box<[PathBuf]>> {
+    let boxed = std::fs::read_dir(recipes)?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .collect()
+        .collect();
+
+    Ok(boxed)
 }
 
-fn crop_latest_png<P, Q, R>(search_in: P, dst_inv: Q, dst_item: R)
+fn crop_latest_png<P, Q, R>(search_in: P, dst_inv: Q, dst_item: R) -> Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
     R: AsRef<Path>,
 {
-    let (path_inv, path_item) = get_latest_pngs(search_in).expect("directory or image not found");
+    use image::ImageReader;
 
-    let mut image_inv = ImageReader::open(path_inv)
-        .expect("failed to open image")
-        .decode()
-        .expect("failed to decode image");
+    let (path_inv, path_item) = get_latest_pngs(search_in)?;
 
-    let mut image_item = ImageReader::open(path_item)
-        .expect("failed to open image")
-        .decode()
-        .expect("failed to decode image");
+    let mut image_inv = ImageReader::open(path_inv)?.decode()?;
+    let mut image_item = ImageReader::open(path_item)?.decode()?;
 
     image_inv
         .crop(717, 540, INV_WIDTH, INV_HEIGHT)
-        .save(dst_inv)
-        .expect("failed to save image");
+        .save(dst_inv)?;
 
     image_item
         .crop(1053, 381, ITEM_WIDTH, ITEM_HEIGHT)
-        .save(dst_item)
-        .expect("failed to save image");
+        .save(dst_item)?;
+
+    Ok(())
 }
 
 // (second latest, most latest)
-fn get_latest_pngs(path: impl AsRef<Path>) -> Option<(PathBuf, PathBuf)> {
+fn get_latest_pngs(path: impl AsRef<Path>) -> Result<(PathBuf, PathBuf)> {
     struct Entry {
         modified: SystemTime,
         path: PathBuf,
     }
 
-    let mut entries: Box<[Entry]> = std::fs::read_dir(path)
-        .ok()?
+    let mut entries: Box<[Entry]> = std::fs::read_dir(path)?
         .filter_map(Result::ok)
         .filter_map(|entry| {
             entry.metadata().ok().and_then(|metadata| {
@@ -232,10 +230,34 @@ fn get_latest_pngs(path: impl AsRef<Path>) -> Option<(PathBuf, PathBuf)> {
     entries
         .last_chunk::<2>()
         .map(|[a, b]| (a.path.clone(), b.path.clone()))
+        .ok_or_else(|| anyhow!("two screenshots are required"))
 }
 
 fn send_inputs(inputs: &[INPUT]) {
     unsafe {
         kam::SendInput(inputs, size_of::<INPUT>() as i32);
     }
+}
+
+pub fn message_box<S, T>(msg: S, title: T) -> Result<()>
+where
+    S: Into<Vec<u8>>,
+    T: Into<Vec<u8>>,
+{
+    use std::ffi::CString;
+    use windows::core::PCSTR;
+
+    let msg = CString::new(msg)?;
+    let title = CString::new(title)?;
+
+    unsafe {
+        wam::MessageBoxA(
+            None,
+            PCSTR::from_raw(msg.as_bytes().as_ptr()),
+            PCSTR::from_raw(title.as_bytes().as_ptr()),
+            wam::MB_ICONINFORMATION,
+        );
+    }
+
+    Ok(())
 }

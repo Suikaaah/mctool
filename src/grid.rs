@@ -1,4 +1,5 @@
 use crate::coord::Coord;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -20,9 +21,9 @@ impl Grid {
     const END_INV: Coord = Self::ORIGIN_INV.add(Self::GRID_SIZE.emul(9, 3));
     const END_HOTBAR: Coord = Self::ORIGIN_HOTBAR.add(Self::GRID_SIZE.emul(9, 1));
 
-    pub fn set_cursor(&self) {
+    pub fn set_cursor(&self) -> Result<()> {
         let Coord(x, y) = self.into();
-        crate::io::set_cursor(x, y);
+        crate::io::set_cursor(x, y)
     }
 }
 

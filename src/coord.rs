@@ -41,7 +41,7 @@ impl From<(i32, i32)> for Coord {
 }
 
 impl From<Coord> for (i32, i32) {
-    fn from(value: Coord) -> Self {
-        (value.0, value.1)
+    fn from(Coord(x, y): Coord) -> Self {
+        (x, y)
     }
 }

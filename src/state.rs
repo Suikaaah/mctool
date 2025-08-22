@@ -1,8 +1,18 @@
+pub mod detail;
 mod key;
 mod recipes;
 pub mod spam;
 
-use crate::{coord::Coord, grid::Grid, io, state::recipes::Recipes};
+use crate::{
+    coord::Coord,
+    grid::Grid,
+    io,
+    state::{
+        detail::{Cursor, Detail, TradeFirst, TradeSecond},
+        recipes::Recipes,
+    },
+};
+use anyhow::Result;
 use key::Key;
 use spam::Spam;
 use std::time::{Duration, Instant};
@@ -24,6 +34,7 @@ pub struct State {
     key_end_trade: Key,
     key_abort: Key,
     key_lock: Key,
+    key_cancel_dc: Key,
     pub spam_left: Spam,
     pub spam_right: Spam,
     pub spam_space: Spam,
@@ -32,46 +43,6 @@ pub struct State {
     double_click_active: bool,
     double_click_origin: Option<Instant>,
     is_locked: bool,
-}
-
-pub enum Detail {
-    Idle,
-    Recording {
-        clicks: Vec<Grid>,
-    },
-    Playing {
-        clicks: Box<[(Grid, Click)]>,
-        origin: Instant,
-    },
-    TradingFirst {
-        state: TradeFirst,
-        position: (i32, i32),
-        origin: Instant,
-    },
-    TradingSecond {
-        state: TradeSecond,
-        position: (i32, i32),
-        origin: Instant,
-    },
-}
-
-pub enum Click {
-    New,
-    Moved,
-    Clicked,
-}
-
-pub enum TradeFirst {
-    InvClicked,
-    MovedToLeft,
-    LeftClicked,
-    Waiting,
-}
-
-pub enum TradeSecond {
-    RightClicked,
-    MovedToLeft,
-    LeftClicked,
 }
 
 impl State {
@@ -89,6 +60,7 @@ impl State {
     const KEY_END_TRADE: VIRTUAL_KEY = kam::VK_LSHIFT;
     const KEY_ABORT: VIRTUAL_KEY = kam::VK_OEM_3;
     const KEYS_LOCK: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, kam::VK_MBUTTON];
+    const KEY_CANCEL_DC: VIRTUAL_KEY = kam::VK_LCONTROL;
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
@@ -96,9 +68,9 @@ impl State {
     const INT_DOUBLE_CLICK: Duration = Duration::from_millis(50);
     const SCREENSHOTS: &str =
         r"C:\Users\Suika\AppData\Roaming\.minecraft\versions\1.8.9-OptiFine_HD_U_M5\screenshots";
-    const RECIPES: &str = "recipes";
+    const RECIPES: &str = r"D:\rust\mctool\recipes";
 
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         use io::MouseButton;
 
         let spam_left = Spam::new(
@@ -119,7 +91,7 @@ impl State {
             || io::send_key_up(kam::VK_SPACE),
         );
 
-        Self {
+        Ok(Self {
             draw_required: false,
             key_left: Key::new(vec![Self::KEY_LEFT]),
             key_right: Key::new(vec![Self::KEY_RIGHT]),
@@ -135,15 +107,16 @@ impl State {
             key_end_trade: Key::new(vec![Self::KEY_END_TRADE]),
             key_abort: Key::new(vec![Self::KEY_ABORT]),
             key_lock: Key::new(Self::KEYS_LOCK.into()),
+            key_cancel_dc: Key::new(vec![Self::KEY_CANCEL_DC]),
             spam_left,
             spam_right,
             spam_space,
             detail: Detail::Idle,
-            recipes: Recipes::new(io::recipes(Self::RECIPES)),
+            recipes: Recipes::new(io::recipes(Self::RECIPES)?),
             double_click_active: false,
             double_click_origin: None,
             is_locked: false,
-        }
+        })
     }
 
     pub const fn draw_required(&self) -> bool {
@@ -158,7 +131,20 @@ impl State {
         self.is_locked
     }
 
-    pub fn step(&mut self) {
+    pub fn double_click_active(&self) -> bool {
+        self.double_click_active
+            && !io::is_down(Self::KEY_CANCEL_DC)
+            && !self.spam_right.is_active()
+    }
+
+    pub fn double_click_temporarily_disabled(&self) -> bool {
+        self.double_click_active
+            && (io::is_down(Self::KEY_CANCEL_DC) || self.spam_right.is_active())
+    }
+
+    pub fn step(&mut self) -> Result<()> {
+        self.draw_required = false;
+
         self.update_keys();
         self.toggle_spams();
 
@@ -174,7 +160,11 @@ impl State {
             self.double_click_active ^= true;
         }
 
-        if self.double_click_active && self.key_right_click.is_pressed() {
+        if self.key_cancel_dc.is_released() {
+            self.draw_required = true;
+        }
+
+        if self.double_click_active() && self.key_right_click.is_pressed() {
             self.double_click_origin = Some(Instant::now());
         }
 
@@ -193,163 +183,215 @@ impl State {
             self.spam_space.step(now);
         }
 
-        match &mut self.detail {
-            Detail::Idle => {
-                if self.key_prev.is_pressed() {
-                    self.recipes.decrement();
-                }
+        let mut detail = std::mem::replace(&mut self.detail, Detail::Idle);
 
-                if self.key_next.is_pressed() {
-                    self.recipes.increment();
-                }
-
-                if self.key_begin_trade.is_pressed() {
-                    io::send_mouse(io::MouseButton::Left);
-
-                    self.detail = Detail::TradingFirst {
-                        state: TradeFirst::InvClicked,
-                        position: io::get_cursor(),
-                        origin: Instant::now(), // lag-aware
-                    };
-                }
-
-                if self.key_record.is_pressed() {
-                    self.detail = Detail::Recording { clicks: Vec::new() };
-                }
-
-                if self.key_play.is_pressed()
-                    && let Some(path) = self.recipes.get()
-                {
-                    self.detail = Detail::Playing {
-                        clicks: io::load_clicks(path.join(io::FILENAME_CLICKS))
-                            .into_iter()
-                            .map(|grid| (grid, Click::New))
-                            .collect(),
-                        origin: Instant::now(), // lag-aware
-                    };
-                }
-            }
-            Detail::Recording { clicks } => {
-                if self.key_click.is_pressed() {
-                    let coord = Coord::from(io::get_cursor());
-
-                    if let Ok(grid) = coord.try_into() {
-                        clicks.push(grid);
-                    }
-                }
-
-                if self.key_record.is_pressed() {
-                    io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, clicks);
-                    self.recipes = Recipes::new(io::recipes(Self::RECIPES));
-                    self.detail = Detail::Idle;
-                }
-            }
-            Detail::Playing { clicks, origin } => {
-                let index =
-                    (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
-
-                match clicks.get_mut(index / 2) {
-                    None => {
-                        self.detail = Detail::Idle;
-                        self.draw_required = true;
-                    }
-                    Some(opt) => match opt {
-                        (grid, click @ Click::New) => {
-                            if index & 1 == 0 {
-                                grid.set_cursor();
-                                *click = Click::Moved;
-                            }
-                        }
-                        (_, click @ Click::Moved) => {
-                            if index & 1 == 1 {
-                                io::send_mouse(io::MouseButton::Left);
-                                *click = Click::Clicked;
-                            }
-                        }
-                        (_, Click::Clicked) => (),
-                    },
-                }
-            }
+        let new_detail = match &mut detail {
+            Detail::Idle => self.on_idle(),
+            Detail::Recording { clicks } => self.on_record(clicks),
+            Detail::Playing { clicks, origin } => self.on_play(clicks, origin),
             Detail::TradingFirst {
                 state,
                 position,
                 origin,
-            } => {
-                let index =
-                    (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
-
-                match state {
-                    TradeFirst::InvClicked => {
-                        if 0 < index {
-                            io::set_cursor(828, 474);
-                            *state = TradeFirst::MovedToLeft;
-                        }
-                    }
-                    TradeFirst::MovedToLeft => {
-                        if 1 < index {
-                            io::send_mouse(io::MouseButton::Left);
-                            *state = TradeFirst::LeftClicked;
-                        }
-                    }
-                    TradeFirst::LeftClicked => {
-                        if 2 < index {
-                            io::set_cursor(1080, 474);
-                            *state = TradeFirst::Waiting;
-                        }
-                    }
-                    TradeFirst::Waiting => {
-                        if self.key_end_trade.is_pressed() {
-                            io::send_mouse(io::MouseButton::Left);
-
-                            self.detail = Detail::TradingSecond {
-                                state: TradeSecond::RightClicked,
-                                position: *position,
-                                origin: Instant::now(),
-                            };
-                        }
-                    }
-                }
-            }
+            } => self.on_trade_first(state, *position, origin),
             Detail::TradingSecond {
                 state,
-                position: (x, y),
+                position,
                 origin,
-            } => {
-                let index =
-                    (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
+            } => self.on_trade_second(state, *position, origin),
+        }?;
 
-                match state {
-                    TradeSecond::RightClicked => {
-                        if 0 < index {
-                            io::set_cursor(828, 474);
-                            *state = TradeSecond::MovedToLeft;
-                        }
-                    }
-                    TradeSecond::MovedToLeft => {
-                        if 1 < index {
-                            io::send_mouse(io::MouseButton::Left);
-                            *state = TradeSecond::LeftClicked;
-                        }
-                    }
-                    TradeSecond::LeftClicked => {
-                        if 2 < index {
-                            io::set_cursor(*x, *y);
-                            self.draw_required = true;
-                            self.detail = Detail::Idle;
-                        }
-                    }
-                }
-            }
+        match new_detail {
+            Some(detail) => self.detail = detail,
+            None => self.detail = detail,
         }
+
+        Ok(())
     }
 
-    pub const fn double_click_active(&self) -> bool {
-        self.double_click_active
+    fn on_idle(&mut self) -> Result<Option<Detail>> {
+        if self.key_prev.is_pressed() {
+            self.recipes.decrement();
+        }
+
+        if self.key_next.is_pressed() {
+            self.recipes.increment();
+        }
+
+        let retval = if self.key_begin_trade.is_pressed() {
+            io::send_mouse(io::MouseButton::Left);
+
+            Some(Detail::TradingFirst {
+                state: TradeFirst::InvClicked,
+                position: io::get_cursor()?,
+                origin: Instant::now(),
+            })
+        } else if self.key_record.is_pressed() {
+            Some(Detail::Recording { clicks: Vec::new() })
+        } else if self.key_play.is_pressed()
+            && let Some(path) = self.recipes.get_path()?
+        {
+            Some(Detail::Playing {
+                clicks: io::load_clicks(path.join(io::FILENAME_CLICKS))?
+                    .into_iter()
+                    .map(|grid| (grid, Cursor::New))
+                    .collect(),
+                origin: Instant::now(),
+            })
+        } else {
+            None
+        };
+
+        Ok(retval)
+    }
+
+    fn on_record(&mut self, clicks: &mut Vec<Grid>) -> Result<Option<Detail>> {
+        if self.key_click.is_pressed() {
+            let coord = Coord::from(io::get_cursor()?);
+
+            if let Ok(grid) = coord.try_into() {
+                clicks.push(grid);
+            }
+        }
+
+        let retval = if self.key_record.is_pressed() {
+            io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, clicks)?;
+            self.recipes = Recipes::new(io::recipes(Self::RECIPES)?);
+            Some(Detail::Idle)
+        } else {
+            None
+        };
+
+        Ok(retval)
+    }
+
+    fn on_play(
+        &mut self,
+        clicks: &mut [(Grid, Cursor)],
+        origin: &Instant,
+    ) -> Result<Option<Detail>> {
+        let index = (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
+
+        let retval = match clicks.get_mut(index / 2) {
+            None => {
+                self.draw_required = true;
+                Some(Detail::Idle)
+            }
+            Some(opt) => {
+                match opt {
+                    (grid, cursor @ Cursor::New) => {
+                        if index & 1 == 0 {
+                            grid.set_cursor()?;
+                            *cursor = Cursor::Moved;
+                        }
+                    }
+                    (_, cursor @ Cursor::Moved) => {
+                        if index & 1 == 1 {
+                            io::send_mouse(io::MouseButton::Left);
+                            *cursor = Cursor::Clicked;
+                        }
+                    }
+                    (_, Cursor::Clicked) => (),
+                }
+
+                None
+            }
+        };
+
+        Ok(retval)
+    }
+
+    fn on_trade_first(
+        &mut self,
+        state: &mut TradeFirst,
+        position: (i32, i32),
+        origin: &Instant,
+    ) -> Result<Option<Detail>> {
+        let index = (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
+
+        let retval = match state {
+            TradeFirst::InvClicked => {
+                if 0 < index {
+                    io::set_cursor(828, 474)?;
+                    *state = TradeFirst::MovedToLeft;
+                }
+
+                None
+            }
+            TradeFirst::MovedToLeft => {
+                if 1 < index {
+                    io::send_mouse(io::MouseButton::Left);
+                    *state = TradeFirst::LeftClicked;
+                }
+
+                None
+            }
+            TradeFirst::LeftClicked => {
+                if 2 < index {
+                    io::set_cursor(1080, 474)?;
+                    *state = TradeFirst::Waiting;
+                }
+
+                None
+            }
+            TradeFirst::Waiting => {
+                if self.key_end_trade.is_pressed() {
+                    io::send_mouse(io::MouseButton::Left);
+
+                    Some(Detail::TradingSecond {
+                        state: TradeSecond::RightClicked,
+                        position,
+                        origin: Instant::now(),
+                    })
+                } else {
+                    None
+                }
+            }
+        };
+
+        Ok(retval)
+    }
+
+    fn on_trade_second(
+        &mut self,
+        state: &mut TradeSecond,
+        (x, y): (i32, i32),
+        origin: &Instant,
+    ) -> Result<Option<Detail>> {
+        let index = (origin.elapsed().as_secs_f64() / Self::INT_PLAY.as_secs_f64()) as usize;
+
+        let retval = match state {
+            TradeSecond::RightClicked => {
+                if 0 < index {
+                    io::set_cursor(828, 474)?;
+                    *state = TradeSecond::MovedToLeft;
+                }
+
+                None
+            }
+            TradeSecond::MovedToLeft => {
+                if 1 < index {
+                    io::send_mouse(io::MouseButton::Left);
+                    *state = TradeSecond::LeftClicked;
+                }
+
+                None
+            }
+            TradeSecond::LeftClicked => {
+                if 2 < index {
+                    io::set_cursor(x, y)?;
+                    self.draw_required = true;
+                    Some(Detail::Idle)
+                } else {
+                    None
+                }
+            }
+        };
+
+        Ok(retval)
     }
 
     fn update_keys(&mut self) {
-        self.draw_required = false;
-
         let mut update = |key: &mut Key| {
             key.update();
 
@@ -359,6 +401,7 @@ impl State {
         };
 
         update(&mut self.key_lock);
+        update(&mut self.key_cancel_dc);
 
         // does not count as a modification which needs redraw
         self.key_click.update();
