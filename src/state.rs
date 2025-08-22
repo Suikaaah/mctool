@@ -131,15 +131,12 @@ impl State {
         self.is_locked
     }
 
-    pub fn double_click_active(&self) -> bool {
-        self.double_click_active
-            && !io::is_down(Self::KEY_CANCEL_DC)
-            && !self.spam_right.is_active()
+    pub fn double_click_active_mapped(&self) -> bool {
+        self.double_click_active && !self.double_click_disable_condition()
     }
 
     pub fn double_click_temporarily_disabled(&self) -> bool {
-        self.double_click_active
-            && (io::is_down(Self::KEY_CANCEL_DC) || self.spam_right.is_active())
+        self.double_click_active && self.double_click_disable_condition()
     }
 
     pub fn step(&mut self) -> Result<()> {
@@ -164,7 +161,7 @@ impl State {
             self.draw_required = true;
         }
 
-        if self.double_click_active() && self.key_right_click.is_pressed() {
+        if self.double_click_active_mapped() && self.key_right_click.is_pressed() {
             self.double_click_origin = Some(Instant::now());
         }
 
@@ -255,7 +252,10 @@ impl State {
         }
 
         let retval = if self.key_record.is_pressed() {
-            io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, clicks)?;
+            if let Err(e) = io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, clicks) {
+                io::message_box(format!("Reason: {e}"), "Failed to crate recipe")?;
+            }
+
             self.recipes = Recipes::new(io::recipes(Self::RECIPES)?);
             Some(Detail::Idle)
         } else {
@@ -432,5 +432,9 @@ impl State {
         toggle(&self.key_left, &mut self.spam_left);
         toggle(&self.key_right, &mut self.spam_right);
         toggle(&self.key_space, &mut self.spam_space);
+    }
+
+    fn double_click_disable_condition(&self) -> bool {
+        io::is_down(Self::KEY_CANCEL_DC) || self.spam_right.is_active()
     }
 }

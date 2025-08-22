@@ -1,4 +1,5 @@
 use crate::grid::Grid;
+use crate::map_err_anyhow::MapErrAnyhow;
 use anyhow::{Result, anyhow};
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -135,10 +136,10 @@ pub fn send_mouse(button: MouseButton) {
     send_inputs(&[down, up]);
 }
 
-pub fn save_clicks<P, Q>(screenshots: P, recipes: Q, clicks: &[Grid]) -> Result<()>
+pub fn save_clicks<P1, P2>(screenshots: P1, recipes: P2, clicks: &[Grid]) -> Result<()>
 where
-    P: AsRef<Path>,
-    Q: AsRef<Path>,
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
 {
     let timestamp = SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
@@ -149,17 +150,23 @@ where
 
     std::fs::create_dir(&dir)?;
 
-    let json = File::create_new(dir.join(FILENAME_CLICKS))?;
+    let result = File::create_new(dir.join(FILENAME_CLICKS))
+        .map_err_anyhow()
+        .and_then(|json| {
+            crop_latest_png(
+                screenshots,
+                dir.join(FILENAME_THUMBNAIL),
+                dir.join(FILENAME_ITEM),
+            )?;
 
-    serde_json::to_writer(json, clicks)?;
+            Ok(serde_json::to_writer(json, clicks)?)
+        });
 
-    crop_latest_png(
-        screenshots,
-        dir.join(FILENAME_THUMBNAIL),
-        dir.join(FILENAME_ITEM),
-    )?;
+    if result.is_err() {
+        std::fs::remove_dir_all(dir)?;
+    }
 
-    Ok(())
+    result
 }
 
 pub fn load_clicks(path: impl AsRef<Path>) -> Result<Box<[Grid]>> {
@@ -176,11 +183,11 @@ pub fn recipes(recipes: impl AsRef<Path>) -> Result<Box<[PathBuf]>> {
     Ok(boxed)
 }
 
-fn crop_latest_png<P, Q, R>(search_in: P, dst_inv: Q, dst_item: R) -> Result<()>
+fn crop_latest_png<P1, P2, P3>(search_in: P1, dst_inv: P2, dst_item: P3) -> Result<()>
 where
-    P: AsRef<Path>,
-    Q: AsRef<Path>,
-    R: AsRef<Path>,
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+    P3: AsRef<Path>,
 {
     use image::ImageReader;
 
@@ -239,10 +246,10 @@ fn send_inputs(inputs: &[INPUT]) {
     }
 }
 
-pub fn message_box<S, T>(msg: S, title: T) -> Result<()>
+pub fn message_box<V1, V2>(msg: V1, title: V2) -> Result<()>
 where
-    S: Into<Vec<u8>>,
-    T: Into<Vec<u8>>,
+    V1: Into<Vec<u8>>,
+    V2: Into<Vec<u8>>,
 {
     use std::ffi::CString;
     use windows::core::PCSTR;

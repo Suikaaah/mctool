@@ -5,6 +5,7 @@ mod engine;
 mod font_engine;
 mod grid;
 mod io;
+mod map_err_anyhow;
 mod state;
 
 fn main_detail() -> anyhow::Result<()> {
@@ -32,7 +33,7 @@ fn main_detail() -> anyhow::Result<()> {
 
 fn main() {
     if let Err(e) = main_detail() {
-        io::message_box(format!("Reason: {e}"), "Program Terminated")
+        io::message_box(format!("Reason: {e}"), "Program terminated")
             .expect("failed to show message box");
     }
 }

@@ -1,8 +1,9 @@
 use crate::{
     io,
+    map_err_anyhow::MapErrAnyhow,
     state::{State, detail::Detail},
 };
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use sdl2::{
     EventPump, Sdl,
     event::Event,
@@ -39,13 +40,13 @@ impl Engine {
     const RED: Color = Color::RGB(0x7F, 0x00, 0x00);
 
     pub fn new() -> Result<Self> {
-        let context = sdl2::init().map_err(|e| anyhow!("{e}"))?;
+        let context = sdl2::init().map_err_anyhow()?;
 
-        let event_pump = context.event_pump().map_err(|e| anyhow!("{e}"))?;
+        let event_pump = context.event_pump().map_err_anyhow()?;
 
         let canvas = context
             .video()
-            .map_err(|e| anyhow!("{e}"))?
+            .map_err_anyhow()?
             .window(Self::TITLE, Self::WIDTH, Self::HEIGHT)
             .position_centered()
             .build()?
@@ -113,7 +114,7 @@ impl Engine {
             tab(
                 0,
                 "DOUBLE",
-                state.double_click_active(),
+                state.double_click_active_mapped(),
                 state.double_click_temporarily_disabled(),
             )?;
             tab(1, "LEFT", state.spam_left.is_active(), false)?;
@@ -168,7 +169,7 @@ impl Engine {
                 let texture = self
                     .tex_creator
                     .load_texture(path.join(io::FILENAME_THUMBNAIL))
-                    .map_err(|e| anyhow!("{e}"))?;
+                    .map_err_anyhow()?;
 
                 let dst = Rect::new(
                     Self::PADDING as i32,
@@ -177,15 +178,13 @@ impl Engine {
                     io::INV_HEIGHT,
                 );
 
-                self.canvas
-                    .copy(&texture, None, dst)
-                    .map_err(|e| anyhow!("{e}"))?;
+                self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
             }
             {
                 let texture = self
                     .tex_creator
                     .load_texture(path.join(io::FILENAME_ITEM))
-                    .map_err(|e| anyhow!("{e}"))?;
+                    .map_err_anyhow()?;
 
                 let dst = Rect::new(
                     Self::WIDTH as i32 - Self::PADDING as i32 - io::ITEM_WIDTH as i32,
@@ -194,9 +193,7 @@ impl Engine {
                     io::ITEM_HEIGHT,
                 );
 
-                self.canvas
-                    .copy(&texture, None, dst)
-                    .map_err(|e| anyhow!("{e}"))?;
+                self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
             }
         }
 
@@ -229,11 +226,11 @@ impl Engine {
                 None,
                 Rect::new(x, y, surface.width(), surface.height()),
             )
-            .map_err(|e| anyhow!("{e}"))
+            .map_err_anyhow()
     }
 
     fn draw_rect(&mut self, rect: Rect, color: Color) -> Result<()> {
         self.canvas.set_draw_color(color);
-        self.canvas.fill_rect(rect).map_err(|e| anyhow!("{e}"))
+        self.canvas.fill_rect(rect).map_err_anyhow()
     }
 }
