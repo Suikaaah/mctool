@@ -8,13 +8,16 @@ mod io;
 mod map_err_anyhow;
 mod state;
 
-fn main_detail() -> anyhow::Result<()> {
+fn detail() -> anyhow::Result<()> {
     use {engine::Engine, font_engine::FontEngine, state::State};
+
+    const FONT: &str = "CascadiaMono.ttf";
+    const FONT_SIZE: u16 = 16;
 
     let mut engine = Engine::new()?;
     let mut state = State::new()?;
     let font_engine = FontEngine::new()?;
-    let font = font_engine.load_font(16)?;
+    let font = font_engine.load_font(FONT, FONT_SIZE)?;
 
     'main_loop: loop {
         while let Some(event) = engine.poll_event() {
@@ -32,7 +35,7 @@ fn main_detail() -> anyhow::Result<()> {
 }
 
 fn main() {
-    if let Err(e) = main_detail() {
+    if let Err(e) = detail() {
         io::message_box(format!("Reason: {e}"), "Program terminated")
             .expect("failed to show message box");
     }

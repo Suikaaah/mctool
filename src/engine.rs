@@ -70,21 +70,23 @@ impl Engine {
     }
 
     pub fn draw(&mut self, state: &State, font: &Font) -> Result<()> {
-        if state.draw_required() || !self.frame_initialized {
+        let draw = state.draw_required() || !self.frame_initialized;
+
+        if draw {
             self.frame_initialized = true;
             self.canvas.set_draw_color(Self::BACKGROUND);
             self.canvas.clear();
 
             match state.detail() {
-                Detail::Idle => self.render_thumbnail(state),
+                Detail::Idle => self.draw_thumbnail(state),
                 Detail::Recording { .. } => {
-                    self.render_font_centered(font, "Recording...", Self::CENTER, Color::WHITE)
+                    self.draw_font_centered(font, "Recording...", Self::CENTER, Color::WHITE)
                 }
                 Detail::Playing { .. } => {
-                    self.render_font_centered(font, "Playing...", Self::CENTER, Color::WHITE)
+                    self.draw_font_centered(font, "Playing...", Self::CENTER, Color::WHITE)
                 }
                 Detail::TradingFirst { .. } | Detail::TradingSecond { .. } => {
-                    self.render_font_centered(font, "Trading...", Self::CENTER, Color::WHITE)
+                    self.draw_font_centered(font, "Trading...", Self::CENTER, Color::WHITE)
                 }
             }?;
 
@@ -108,7 +110,7 @@ impl Engine {
                         Self::TAB_BACKGROUND
                     },
                 )
-                .and_then(|()| self.render_font_centered(font, text, (cx, cy), Color::WHITE))
+                .and_then(|_| self.draw_font_centered(font, text, (cx, cy), Color::WHITE))
             };
 
             tab(
@@ -121,33 +123,7 @@ impl Engine {
             tab(2, "RIGHT", state.spam_right.is_active(), false)?;
             tab(3, "SPACE", state.spam_space.is_active(), false)?;
 
-            self.draw_rect(
-                Rect::new(
-                    Self::WIDTH as i32 - Self::TAB_WIDTH as i32,
-                    Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32,
-                    Self::TAB_WIDTH,
-                    Self::TAB_HEIGHT,
-                ),
-                if state.is_locked() {
-                    Self::RED
-                } else {
-                    Self::TAB_BACKGROUND
-                },
-            )?;
-
-            self.render_font_centered(
-                font,
-                if state.is_locked() {
-                    "LOCKED"
-                } else {
-                    "UNLOCKED"
-                },
-                (
-                    Self::WIDTH as i32 - Self::TAB_WIDTH as i32 / 2,
-                    Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32 / 2,
-                ),
-                Color::WHITE,
-            )?;
+            self.draw_lock(state, font)?;
 
             self.canvas
                 .window_mut()
@@ -163,7 +139,37 @@ impl Engine {
         std::thread::sleep(Self::POLLING_RATE);
     }
 
-    fn render_thumbnail(&mut self, state: &State) -> Result<()> {
+    fn draw_lock(&mut self, state: &State, font: &Font) -> Result<()> {
+        self.draw_rect(
+            Rect::new(
+                Self::WIDTH as i32 - Self::TAB_WIDTH as i32,
+                Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32,
+                Self::TAB_WIDTH,
+                Self::TAB_HEIGHT,
+            ),
+            if state.is_locked() {
+                Self::RED
+            } else {
+                Self::TAB_BACKGROUND
+            },
+        )?;
+
+        self.draw_font_centered(
+            font,
+            if state.is_locked() {
+                "LOCKED"
+            } else {
+                "UNLOCKED"
+            },
+            (
+                Self::WIDTH as i32 - Self::TAB_WIDTH as i32 / 2,
+                Self::HEIGHT as i32 - Self::TAB_HEIGHT as i32 / 2,
+            ),
+            Color::WHITE,
+        )
+    }
+
+    fn draw_thumbnail(&mut self, state: &State) -> Result<()> {
         if let Some(path) = state.recipes.get_path()? {
             {
                 let texture = self
@@ -200,7 +206,7 @@ impl Engine {
         Ok(())
     }
 
-    fn render_font_centered(
+    fn draw_font_centered(
         &mut self,
         font: &Font,
         text: &str,

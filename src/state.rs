@@ -93,21 +93,21 @@ impl State {
 
         Ok(Self {
             draw_required: false,
-            key_left: Key::new(vec![Self::KEY_LEFT]),
-            key_right: Key::new(vec![Self::KEY_RIGHT]),
-            key_space: Key::new(vec![Self::KEY_SPACE]),
-            key_record: Key::new(vec![Self::KEY_RECORD]),
-            key_play: Key::new(vec![Self::KEY_PLAY]),
-            key_click: Key::new(vec![Self::KEY_CLICK]),
-            key_right_click: Key::new(vec![Self::KEY_RIGHT_CLICK]),
-            key_prev: Key::new(vec![Self::KEY_PREV]),
-            key_next: Key::new(vec![Self::KEY_NEXT]),
-            key_double_click: Key::new(vec![Self::KEY_DOUBLE_CLICK]),
-            key_begin_trade: Key::new(vec![Self::KEY_BEGIN_TRADE]),
-            key_end_trade: Key::new(vec![Self::KEY_END_TRADE]),
-            key_abort: Key::new(vec![Self::KEY_ABORT]),
-            key_lock: Key::new(Self::KEYS_LOCK.into()),
-            key_cancel_dc: Key::new(vec![Self::KEY_CANCEL_DC]),
+            key_left: Key::single(Self::KEY_LEFT),
+            key_right: Key::single(Self::KEY_RIGHT),
+            key_space: Key::single(Self::KEY_SPACE),
+            key_record: Key::single(Self::KEY_RECORD),
+            key_play: Key::single(Self::KEY_PLAY),
+            key_click: Key::single(Self::KEY_CLICK),
+            key_right_click: Key::single(Self::KEY_RIGHT_CLICK),
+            key_prev: Key::single(Self::KEY_PREV),
+            key_next: Key::single(Self::KEY_NEXT),
+            key_double_click: Key::single(Self::KEY_DOUBLE_CLICK),
+            key_begin_trade: Key::single(Self::KEY_BEGIN_TRADE),
+            key_end_trade: Key::single(Self::KEY_END_TRADE),
+            key_abort: Key::single(Self::KEY_ABORT),
+            key_lock: Key::multiple(Self::KEYS_LOCK),
+            key_cancel_dc: Key::single(Self::KEY_CANCEL_DC),
             spam_left,
             spam_right,
             spam_space,
@@ -141,7 +141,6 @@ impl State {
 
     pub fn step(&mut self) -> Result<()> {
         self.draw_required = false;
-
         self.update_keys();
         self.toggle_spams();
 
@@ -180,9 +179,9 @@ impl State {
             self.spam_space.step(now);
         }
 
-        let mut detail = std::mem::replace(&mut self.detail, Detail::Idle);
+        let mut detail_taken = std::mem::replace(&mut self.detail, Detail::Idle);
 
-        let new_detail = match &mut detail {
+        let new_detail = match &mut detail_taken {
             Detail::Idle => self.on_idle(),
             Detail::Recording { clicks } => self.on_record(clicks),
             Detail::Playing { clicks, origin } => self.on_play(clicks, origin),
@@ -200,7 +199,7 @@ impl State {
 
         match new_detail {
             Some(detail) => self.detail = detail,
-            None => self.detail = detail,
+            None => self.detail = detail_taken,
         }
 
         Ok(())

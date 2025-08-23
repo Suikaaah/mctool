@@ -8,9 +8,18 @@ pub struct Key {
 }
 
 impl Key {
-    pub fn new(vkeys: Vec<VIRTUAL_KEY>) -> Self {
+    pub fn single(vkey: VIRTUAL_KEY) -> Self {
         Self {
-            vkeys: vkeys.into_boxed_slice(),
+            vkeys: Box::new([vkey]),
+            previous: false,
+            is_pressed: false,
+            is_released: false,
+        }
+    }
+
+    pub fn multiple(vkeys: impl Into<Box<[VIRTUAL_KEY]>>) -> Self {
+        Self {
+            vkeys: vkeys.into(),
             previous: false,
             is_pressed: false,
             is_released: false,

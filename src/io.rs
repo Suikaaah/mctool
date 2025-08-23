@@ -37,7 +37,7 @@ pub fn get_cursor() -> Result<(i32, i32)> {
 }
 
 pub fn set_cursor(x: i32, y: i32) -> Result<()> {
-    Ok(unsafe { wam::SetCursorPos(x, y) }?)
+    unsafe { wam::SetCursorPos(x, y) }.map_err_anyhow()
 }
 
 pub fn send_key_down(vkey: VIRTUAL_KEY) {
@@ -159,7 +159,7 @@ where
                 dir.join(FILENAME_ITEM),
             )?;
 
-            Ok(serde_json::to_writer(json, clicks)?)
+            serde_json::to_writer(json, clicks).map_err_anyhow()
         });
 
     if result.is_err() {
@@ -171,7 +171,7 @@ where
 
 pub fn load_clicks(path: impl AsRef<Path>) -> Result<Box<[Grid]>> {
     let file = File::open(path)?;
-    Ok(serde_json::from_reader(file)?)
+    serde_json::from_reader(file).map_err_anyhow()
 }
 
 pub fn recipes(recipes: impl AsRef<Path>) -> Result<Box<[PathBuf]>> {
@@ -202,9 +202,8 @@ where
 
     image_item
         .crop(1053, 381, ITEM_WIDTH, ITEM_HEIGHT)
-        .save(dst_item)?;
-
-    Ok(())
+        .save(dst_item)
+        .map_err_anyhow()
 }
 
 // (second latest, most latest)
