@@ -11,13 +11,10 @@ mod state;
 fn detail() -> anyhow::Result<()> {
     use {engine::Engine, font_engine::FontEngine, state::State};
 
-    const FONT: &str = "CascadiaMono.ttf";
-    const FONT_SIZE: u16 = 16;
-
     let mut engine = Engine::new()?;
     let mut state = State::new()?;
     let font_engine = FontEngine::new()?;
-    let font = font_engine.load_font(FONT, FONT_SIZE)?;
+    let fonts = font_engine.load_fonts()?;
 
     engine.start_text_input();
 
@@ -37,7 +34,7 @@ fn detail() -> anyhow::Result<()> {
         }
 
         state.step()?;
-        engine.draw(&state, &font)?;
+        engine.draw(&state, &fonts)?;
         Engine::sleep();
     }
 

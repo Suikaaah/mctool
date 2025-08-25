@@ -1,4 +1,5 @@
 use crate::{
+    font_engine::Fonts,
     io,
     map_err_anyhow::MapErrAnyhow,
     state::{State, detail::Detail},
@@ -10,7 +11,7 @@ use sdl2::{
     image::LoadTexture,
     pixels::Color,
     rect::Rect,
-    render::{Canvas, TextureCreator},
+    render::{BlendMode, Canvas, TextureCreator},
     surface::Surface,
     ttf::Font,
     video::{Window, WindowContext},
@@ -40,6 +41,7 @@ impl Engine {
     const TAB_BACKGROUND: Color = Color::RGB(0x38, 0x38, 0x38);
     const GREEN: Color = Color::RGB(0x00, 0x7F, 0x00);
     const RED: Color = Color::RGB(0x7F, 0x00, 0x00);
+    const DIM: Color = Color::RGBA(0x00, 0x00, 0x00, 0xC0);
 
     pub fn new() -> Result<Self> {
         let context = sdl2::init().map_err_anyhow()?;
@@ -48,13 +50,15 @@ impl Engine {
 
         let video = context.video().map_err_anyhow()?;
 
-        let canvas = video
+        let mut canvas = video
             .window(Self::TITLE, Self::WIDTH, Self::HEIGHT)
             .position_centered()
             .build()?
             .into_canvas()
             .accelerated()
             .build()?;
+
+        canvas.set_blend_mode(BlendMode::Blend);
 
         let tex_creator = canvas.texture_creator();
 
@@ -72,32 +76,13 @@ impl Engine {
         self.event_pump.poll_event()
     }
 
-    pub fn draw(&mut self, state: &State, font: &Font) -> Result<()> {
+    pub fn draw(&mut self, state: &State, fonts: &Fonts) -> Result<()> {
         let draw = state.draw_required() || !self.frame_initialized;
 
         if draw {
             self.frame_initialized = true;
             self.canvas.set_draw_color(Self::BACKGROUND);
             self.canvas.clear();
-
-            match state.detail() {
-                Detail::Idle => self.draw_thumbnail(state, font),
-                Detail::Recording { .. } => {
-                    self.draw_font_centered(font, "Recording...", Self::CENTER, Color::WHITE)
-                }
-                Detail::Naming { name, .. } => self.draw_font_centered(
-                    font,
-                    &format!("Filename:[{name}]"),
-                    Self::CENTER,
-                    Color::WHITE,
-                ),
-                Detail::Playing { .. } => {
-                    self.draw_font_centered(font, "Playing...", Self::CENTER, Color::WHITE)
-                }
-                Detail::TradingFirst { .. } | Detail::TradingSecond { .. } => {
-                    self.draw_font_centered(font, "Trading...", Self::CENTER, Color::WHITE)
-                }
-            }?;
 
             let mut tab = |i, text, is_active, red| {
                 let y = Self::HEIGHT - Self::TAB_HEIGHT;
@@ -119,7 +104,7 @@ impl Engine {
                         Self::TAB_BACKGROUND
                     },
                 )
-                .and_then(|_| self.draw_font_centered(font, text, (cx, cy), Color::WHITE))
+                .and_then(|_| self.draw_font_centered(&fonts.regular, text, (cx, cy), Color::WHITE))
             };
 
             tab(
@@ -132,7 +117,49 @@ impl Engine {
             tab(2, "RIGHT", state.spam_right.is_active(), false)?;
             tab(3, "SPACE", state.spam_space.is_active(), false)?;
 
-            self.draw_lock(state, font)?;
+            self.draw_lock(state, fonts)?;
+            self.draw_thumbnail(state, fonts)?;
+
+            match state.detail() {
+                Detail::Idle => (),
+                Detail::Recording { clicks, count } => {
+                    let display = match clicks.last() {
+                        None => "Recording...".to_string(),
+                        Some(last) if count < &2 => format!("[..., {last:?}]"),
+                        Some(last) => format!("[..., {last:?} * {count}]"),
+                    };
+
+                    self.dim()?;
+                    self.draw_font_centered(&fonts.large, &display, Self::CENTER, Color::WHITE)?;
+                }
+                Detail::Naming { name, .. } => {
+                    self.dim()?;
+                    self.draw_font_centered(
+                        &fonts.large,
+                        &format!("Filename:[{name}]"),
+                        Self::CENTER,
+                        Color::WHITE,
+                    )?;
+                }
+                Detail::Playing { .. } => {
+                    self.dim()?;
+                    self.draw_font_centered(
+                        &fonts.large,
+                        "Playing...",
+                        Self::CENTER,
+                        Color::WHITE,
+                    )?;
+                }
+                Detail::TradingFirst { .. } | Detail::TradingSecond { .. } => {
+                    self.dim()?;
+                    self.draw_font_centered(
+                        &fonts.large,
+                        "Trading...",
+                        Self::CENTER,
+                        Color::WHITE,
+                    )?;
+                }
+            }
 
             self.canvas.present();
         }
@@ -152,7 +179,11 @@ impl Engine {
         self.video.text_input().stop();
     }
 
-    fn draw_lock(&mut self, state: &State, font: &Font) -> Result<()> {
+    fn dim(&mut self) -> Result<()> {
+        self.draw_rect(Rect::new(0, 0, Self::WIDTH, Self::HEIGHT), Self::DIM)
+    }
+
+    fn draw_lock(&mut self, state: &State, fonts: &Fonts) -> Result<()> {
         self.draw_rect(
             Rect::new(
                 Self::WIDTH as i32 - Self::TAB_WIDTH as i32,
@@ -168,7 +199,7 @@ impl Engine {
         )?;
 
         self.draw_font_centered(
-            font,
+            &fonts.regular,
             if state.is_locked() {
                 "LOCKED"
             } else {
@@ -182,17 +213,17 @@ impl Engine {
         )
     }
 
-    fn draw_thumbnail(&mut self, state: &State, font: &Font) -> Result<()> {
+    fn draw_thumbnail(&mut self, state: &State, fonts: &Fonts) -> Result<()> {
         match state.recipes.get_path()? {
             None => self.draw_font_centered(
-                font,
+                &fonts.large,
                 &state.recipes.to_string(),
                 Self::CENTER,
                 Color::WHITE,
             ),
             Some(path) => {
                 self.draw_font_centered(
-                    font,
+                    &fonts.large,
                     &state.recipes.to_string(),
                     (
                         Self::WIDTH as i32 / 2,

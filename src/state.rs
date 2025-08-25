@@ -13,35 +13,18 @@ use crate::{
     },
 };
 use anyhow::Result;
-use key::Key;
+use key::{Key, Keys};
 use spam::Spam;
 use std::time::{Duration, Instant};
-use windows::Win32::UI::Input::KeyboardAndMouse::{self as kam, VIRTUAL_KEY};
+use windows::Win32::UI::Input::KeyboardAndMouse as kam;
 
 pub struct State {
+    detail: Detail,
     draw_required: bool,
-    key_left: Key,
-    key_right: Key,
-    key_space: Key,
-    key_record: Key,
-    key_play: Key,
-    key_click: Key,
-    key_right_click: Key,
-    key_prev: Key,
-    key_next: Key,
-    key_double_click: Key,
-    key_begin_trade: Key,
-    key_end_trade: Key,
-    key_abort: Key,
-    key_lock: Key,
-    key_cancel_dc: Key,
-    key_confirm: Key,
-    key_prev_skip: Key,
-    key_next_skip: Key,
+    keys: Keys,
     pub spam_left: Spam,
     pub spam_right: Spam,
     pub spam_space: Spam,
-    detail: Detail,
     pub recipes: Recipes,
     double_click_active: bool,
     double_click_origin: Option<Instant>,
@@ -49,24 +32,6 @@ pub struct State {
 }
 
 impl State {
-    const KEY_LEFT: VIRTUAL_KEY = kam::VK_Z;
-    const KEY_RIGHT: VIRTUAL_KEY = kam::VK_X;
-    const KEY_SPACE: VIRTUAL_KEY = kam::VK_C;
-    const KEY_RECORD: VIRTUAL_KEY = kam::VK_B;
-    const KEY_PLAY: VIRTUAL_KEY = kam::VK_G;
-    const KEY_CLICK: VIRTUAL_KEY = kam::VK_LBUTTON;
-    const KEY_RIGHT_CLICK: VIRTUAL_KEY = kam::VK_RBUTTON;
-    const KEY_PREV: VIRTUAL_KEY = kam::VK_XBUTTON2;
-    const KEY_NEXT: VIRTUAL_KEY = kam::VK_XBUTTON1;
-    const KEY_DOUBLE_CLICK: VIRTUAL_KEY = kam::VK_TAB;
-    const KEY_BEGIN_TRADE: VIRTUAL_KEY = kam::VK_R;
-    const KEY_END_TRADE: VIRTUAL_KEY = kam::VK_LSHIFT;
-    const KEY_ABORT: VIRTUAL_KEY = kam::VK_OEM_3;
-    const KEYS_LOCK: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, kam::VK_MBUTTON];
-    const KEY_CANCEL_DC: VIRTUAL_KEY = kam::VK_LCONTROL;
-    const KEY_CONFIRM: VIRTUAL_KEY = kam::VK_RETURN;
-    const KEYS_PREV_SKIP: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, Self::KEY_PREV];
-    const KEYS_NEXT_SKIP: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, Self::KEY_NEXT];
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
@@ -98,29 +63,12 @@ impl State {
         );
 
         Ok(Self {
+            detail: Detail::Idle,
             draw_required: false,
-            key_left: Key::single(Self::KEY_LEFT),
-            key_right: Key::single(Self::KEY_RIGHT),
-            key_space: Key::single(Self::KEY_SPACE),
-            key_record: Key::single(Self::KEY_RECORD),
-            key_play: Key::single(Self::KEY_PLAY),
-            key_click: Key::single(Self::KEY_CLICK),
-            key_right_click: Key::single(Self::KEY_RIGHT_CLICK),
-            key_prev: Key::single(Self::KEY_PREV),
-            key_next: Key::single(Self::KEY_NEXT),
-            key_double_click: Key::single(Self::KEY_DOUBLE_CLICK),
-            key_begin_trade: Key::single(Self::KEY_BEGIN_TRADE),
-            key_end_trade: Key::single(Self::KEY_END_TRADE),
-            key_abort: Key::single(Self::KEY_ABORT),
-            key_lock: Key::multiple(Self::KEYS_LOCK),
-            key_cancel_dc: Key::single(Self::KEY_CANCEL_DC),
-            key_confirm: Key::single(Self::KEY_CONFIRM),
-            key_prev_skip: Key::multiple(Self::KEYS_PREV_SKIP),
-            key_next_skip: Key::multiple(Self::KEYS_NEXT_SKIP),
+            keys: Keys::new(),
             spam_left,
             spam_right,
             spam_space,
-            detail: Detail::Idle,
             recipes: Recipes::new(io::recipes(Self::RECIPES)?)?,
             double_click_active: false,
             double_click_origin: None,
@@ -177,11 +125,11 @@ impl State {
         self.update_keys();
         self.toggle_spams();
 
-        if self.key_lock.is_pressed() {
+        if self.keys.lock.is_pressed() {
             self.is_locked ^= true;
         }
 
-        if self.key_abort.is_pressed() {
+        if self.keys.abort.is_pressed() {
             if matches!(self.detail, Detail::Naming { .. }) {
                 self.is_locked = false;
             }
@@ -189,15 +137,15 @@ impl State {
             self.detail = Detail::Idle;
         }
 
-        if self.key_double_click.is_pressed() {
+        if self.keys.double_click.is_pressed() {
             self.double_click_active ^= true;
         }
 
-        if self.key_cancel_dc.is_released() {
+        if self.keys.cancel_dc.is_released() {
             self.draw_required = true;
         }
 
-        if self.double_click_active_mapped() && self.key_right_click.is_pressed() {
+        if self.double_click_active_mapped() && self.keys.right_click.is_pressed() {
             self.double_click_origin = Some(Instant::now());
         }
 
@@ -220,7 +168,7 @@ impl State {
 
         self.detail = match detail_taken {
             Detail::Idle => self.on_idle(),
-            Detail::Recording { clicks } => self.on_record(clicks),
+            Detail::Recording { clicks, count } => self.on_record(clicks, count),
             Detail::Naming {
                 clicks,
                 name,
@@ -249,23 +197,23 @@ impl State {
     }
 
     fn on_idle(&mut self) -> Result<Detail> {
-        if self.key_prev.is_pressed() {
-            if self.key_prev_skip.is_pressed() {
+        if self.keys.prev.is_pressed() {
+            if self.keys.prev_skip.is_pressed() {
                 self.recipes.decrement_skip();
             } else {
                 self.recipes.decrement();
             }
         }
 
-        if self.key_next.is_pressed() {
-            if self.key_next_skip.is_pressed() {
+        if self.keys.next.is_pressed() {
+            if self.keys.next_skip.is_pressed() {
                 self.recipes.increment_skip();
             } else {
                 self.recipes.increment();
             }
         }
 
-        let retval = if self.key_begin_trade.is_pressed() {
+        let retval = if self.keys.begin_trade.is_pressed() {
             io::send_mouse(io::MouseButton::Left);
 
             Detail::TradingFirst {
@@ -273,9 +221,12 @@ impl State {
                 position: io::get_cursor()?,
                 origin: Instant::now(),
             }
-        } else if self.key_record.is_pressed() {
-            Detail::Recording { clicks: Vec::new() }
-        } else if self.key_play.is_pressed()
+        } else if self.keys.record.is_pressed() {
+            Detail::Recording {
+                clicks: Vec::new(),
+                count: 0,
+            }
+        } else if self.keys.play.is_pressed()
             && let Some(path) = self.recipes.get_path()?
         {
             Detail::Playing {
@@ -292,16 +243,23 @@ impl State {
         Ok(retval)
     }
 
-    fn on_record(&mut self, mut clicks: Vec<Grid>) -> Result<Detail> {
-        if self.key_click.is_pressed() {
+    fn on_record(&mut self, mut clicks: Vec<Grid>, mut count: usize) -> Result<Detail> {
+        if self.keys.click.is_pressed() {
             let coord = Coord::from(io::get_cursor()?);
 
             if let Ok(grid) = coord.try_into() {
+                self.draw_required = true;
+
+                count = match clicks.last() {
+                    Some(last) if last == &grid => count + 1,
+                    _ => 1,
+                };
+
                 clicks.push(grid);
             }
         }
 
-        let retval = if self.key_record.is_pressed() {
+        let retval = if self.keys.record.is_pressed() {
             self.is_locked = true;
 
             Detail::Naming {
@@ -310,14 +268,14 @@ impl State {
                 draw_required: false,
             }
         } else {
-            Detail::Recording { clicks }
+            Detail::Recording { clicks, count }
         };
 
         Ok(retval)
     }
 
     fn on_name(&mut self, clicks: Vec<Grid>, name: String) -> Result<Detail> {
-        let retval = if self.key_confirm.is_pressed() {
+        let retval = if self.keys.confirm.is_pressed() {
             match io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, &clicks, &name) {
                 Err(e) => {
                     io::message_box(format!("Reason: {e}"), "Failed to crate recipe")?;
@@ -401,7 +359,7 @@ impl State {
                 io::set_cursor(1080, 474)?;
                 f(TradeFirst::Waiting)
             }
-            TradeFirst::Waiting if self.key_end_trade.is_pressed() => {
+            TradeFirst::Waiting if self.keys.end_trade.is_pressed() => {
                 io::send_mouse(io::MouseButton::Left);
 
                 Detail::TradingSecond {
@@ -457,8 +415,8 @@ impl State {
 
     fn update_keys(&mut self) {
         // does not count as a modification which needs redraw
-        self.key_click.update(false);
-        self.key_right_click.update(false);
+        self.keys.click.update(false);
+        self.keys.right_click.update(false);
 
         let mut update_nolock = |key: &mut Key| {
             key.update(false);
@@ -468,10 +426,10 @@ impl State {
             }
         };
 
-        update_nolock(&mut self.key_abort);
-        update_nolock(&mut self.key_lock);
-        update_nolock(&mut self.key_cancel_dc);
-        update_nolock(&mut self.key_confirm);
+        update_nolock(&mut self.keys.abort);
+        update_nolock(&mut self.keys.lock);
+        update_nolock(&mut self.keys.cancel_dc);
+        update_nolock(&mut self.keys.confirm);
 
         let is_locked = self.is_locked();
         let mut update = |key: &mut Key| {
@@ -482,18 +440,18 @@ impl State {
             }
         };
 
-        update(&mut self.key_left);
-        update(&mut self.key_right);
-        update(&mut self.key_space);
-        update(&mut self.key_record);
-        update(&mut self.key_play);
-        update(&mut self.key_prev);
-        update(&mut self.key_next);
-        update(&mut self.key_double_click);
-        update(&mut self.key_begin_trade);
-        update(&mut self.key_end_trade);
-        update(&mut self.key_prev_skip);
-        update(&mut self.key_next_skip);
+        update(&mut self.keys.left);
+        update(&mut self.keys.right);
+        update(&mut self.keys.space);
+        update(&mut self.keys.record);
+        update(&mut self.keys.play);
+        update(&mut self.keys.prev);
+        update(&mut self.keys.next);
+        update(&mut self.keys.double_click);
+        update(&mut self.keys.begin_trade);
+        update(&mut self.keys.end_trade);
+        update(&mut self.keys.prev_skip);
+        update(&mut self.keys.next_skip);
     }
 
     fn toggle_spams(&mut self) {
@@ -503,12 +461,12 @@ impl State {
             }
         };
 
-        toggle(&self.key_left, &mut self.spam_left);
-        toggle(&self.key_right, &mut self.spam_right);
-        toggle(&self.key_space, &mut self.spam_space);
+        toggle(&self.keys.left, &mut self.spam_left);
+        toggle(&self.keys.right, &mut self.spam_right);
+        toggle(&self.keys.space, &mut self.spam_space);
     }
 
     fn double_click_disable_condition(&self) -> bool {
-        io::is_down(Self::KEY_CANCEL_DC) || self.spam_right.is_active()
+        io::is_down(Keys::CANCEL_DC) || self.spam_right.is_active()
     }
 }

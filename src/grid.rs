@@ -2,7 +2,7 @@ use crate::coord::Coord;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Grid {
     Table(u8, u8),
     Craft,

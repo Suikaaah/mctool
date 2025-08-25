@@ -5,6 +5,7 @@ pub enum Detail {
     Idle,
     Recording {
         clicks: Vec<Grid>,
+        count: usize,
     },
     Naming {
         clicks: Vec<Grid>,
