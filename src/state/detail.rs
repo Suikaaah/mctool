@@ -6,6 +6,11 @@ pub enum Detail {
     Recording {
         clicks: Vec<Grid>,
     },
+    Naming {
+        clicks: Vec<Grid>,
+        name: String,
+        draw_required: bool,
+    },
     Playing {
         clicks: Box<[(Grid, Cursor)]>,
         origin: Instant,

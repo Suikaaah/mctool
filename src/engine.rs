@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use sdl2::{
-    EventPump, Sdl,
+    EventPump, Sdl, VideoSubsystem,
     event::Event,
     image::LoadTexture,
     pixels::Color,
@@ -21,6 +21,7 @@ pub struct Engine {
     frame_initialized: bool,
     tex_creator: TextureCreator<WindowContext>,
     canvas: Canvas<Window>,
+    video: VideoSubsystem,
     event_pump: EventPump,
     _context: Sdl,
 }
@@ -44,9 +45,9 @@ impl Engine {
 
         let event_pump = context.event_pump().map_err_anyhow()?;
 
-        let canvas = context
-            .video()
-            .map_err_anyhow()?
+        let video = context.video().map_err_anyhow()?;
+
+        let canvas = video
             .window(Self::TITLE, Self::WIDTH, Self::HEIGHT)
             .position_centered()
             .build()?
@@ -60,6 +61,7 @@ impl Engine {
             frame_initialized: false,
             tex_creator,
             canvas,
+            video,
             event_pump,
             _context: context,
         })
@@ -82,6 +84,12 @@ impl Engine {
                 Detail::Recording { .. } => {
                     self.draw_font_centered(font, "Recording...", Self::CENTER, Color::WHITE)
                 }
+                Detail::Naming { name, .. } => self.draw_font_centered(
+                    font,
+                    &format!("Filename:[{name}]"),
+                    Self::CENTER,
+                    Color::WHITE,
+                ),
                 Detail::Playing { .. } => {
                     self.draw_font_centered(font, "Playing...", Self::CENTER, Color::WHITE)
                 }
@@ -127,7 +135,7 @@ impl Engine {
 
             self.canvas
                 .window_mut()
-                .set_title(&format!("{} [{}]", Self::TITLE, state.recipes))?;
+                .set_title(&format!("{} - {}", Self::TITLE, state.recipes))?;
 
             self.canvas.present();
         }
@@ -137,6 +145,14 @@ impl Engine {
 
     pub fn sleep() {
         std::thread::sleep(Self::POLLING_RATE);
+    }
+
+    pub fn start_text_input(&self) {
+        self.video.text_input().start();
+    }
+
+    pub fn stop_text_input(&self) {
+        self.video.text_input().stop();
     }
 
     fn draw_lock(&mut self, state: &State, font: &Font) -> Result<()> {

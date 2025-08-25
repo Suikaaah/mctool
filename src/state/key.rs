@@ -26,8 +26,8 @@ impl Key {
         }
     }
 
-    pub fn update(&mut self) {
-        let is_down = self.vkeys.iter().all(|vkey| crate::io::is_down(*vkey));
+    pub fn update(&mut self, is_disabled: bool) {
+        let is_down = !is_disabled && self.vkeys.iter().all(|vkey| crate::io::is_down(*vkey));
 
         self.is_pressed = is_down && !self.previous;
         self.is_released = !is_down && self.previous;

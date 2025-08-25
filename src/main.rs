@@ -19,10 +19,20 @@ fn detail() -> anyhow::Result<()> {
     let font_engine = FontEngine::new()?;
     let font = font_engine.load_font(FONT, FONT_SIZE)?;
 
+    engine.start_text_input();
+
     'main_loop: loop {
         while let Some(event) = engine.poll_event() {
-            if let sdl2::event::Event::Quit { .. } = event {
-                break 'main_loop;
+            use sdl2::{event::Event, keyboard::Keycode};
+
+            match event {
+                Event::Quit { .. } => break 'main_loop,
+                Event::TextInput { text, .. } => state.push_text(&text),
+                Event::KeyDown {
+                    keycode: Some(Keycode::BACKSPACE),
+                    ..
+                } => state.pop_text(),
+                _ => (),
             }
         }
 
@@ -30,6 +40,8 @@ fn detail() -> anyhow::Result<()> {
         engine.draw(&state, &font)?;
         Engine::sleep();
     }
+
+    engine.stop_text_input();
 
     Ok(())
 }

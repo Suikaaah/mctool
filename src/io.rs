@@ -1,6 +1,6 @@
 use crate::grid::Grid;
 use crate::map_err_anyhow::MapErrAnyhow;
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -136,17 +136,17 @@ pub fn send_mouse(button: MouseButton) {
     send_inputs(&[down, up]);
 }
 
-pub fn save_clicks<P1, P2>(screenshots: P1, recipes: P2, clicks: &[Grid]) -> Result<()>
+pub fn save_clicks<P1, P2>(screenshots: P1, recipes: P2, clicks: &[Grid], name: &str) -> Result<()>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
 {
-    let timestamp = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_secs()
-        .to_string();
+    // special message for an empty name (even without this, create_dir would return an error)
+    if name.is_empty() {
+        bail!("cannot save with empty name");
+    }
 
-    let dir = recipes.as_ref().join(timestamp);
+    let dir = recipes.as_ref().join(name);
 
     std::fs::create_dir(&dir)?;
 
@@ -175,12 +175,37 @@ pub fn load_clicks(path: impl AsRef<Path>) -> Result<Box<[Grid]>> {
 }
 
 pub fn recipes(recipes: impl AsRef<Path>) -> Result<Box<[PathBuf]>> {
-    let boxed = std::fs::read_dir(recipes)?
+    let mut boxed: Box<[PathBuf]> = std::fs::read_dir(recipes)?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .collect();
 
+    boxed.sort_unstable();
+
     Ok(boxed)
+}
+
+pub fn message_box<V1, V2>(msg: V1, title: V2) -> Result<()>
+where
+    V1: Into<Vec<u8>>,
+    V2: Into<Vec<u8>>,
+{
+    use std::ffi::CString;
+    use windows::core::PCSTR;
+
+    let msg = CString::new(msg)?;
+    let title = CString::new(title)?;
+
+    unsafe {
+        wam::MessageBoxA(
+            None,
+            PCSTR::from_raw(msg.as_bytes().as_ptr()),
+            PCSTR::from_raw(title.as_bytes().as_ptr()),
+            wam::MB_ICONINFORMATION,
+        );
+    }
+
+    Ok(())
 }
 
 fn crop_latest_png<P1, P2, P3>(search_in: P1, dst_inv: P2, dst_item: P3) -> Result<()>
@@ -243,27 +268,4 @@ fn send_inputs(inputs: &[INPUT]) {
     unsafe {
         kam::SendInput(inputs, size_of::<INPUT>() as i32);
     }
-}
-
-pub fn message_box<V1, V2>(msg: V1, title: V2) -> Result<()>
-where
-    V1: Into<Vec<u8>>,
-    V2: Into<Vec<u8>>,
-{
-    use std::ffi::CString;
-    use windows::core::PCSTR;
-
-    let msg = CString::new(msg)?;
-    let title = CString::new(title)?;
-
-    unsafe {
-        wam::MessageBoxA(
-            None,
-            PCSTR::from_raw(msg.as_bytes().as_ptr()),
-            PCSTR::from_raw(title.as_bytes().as_ptr()),
-            wam::MB_ICONINFORMATION,
-        );
-    }
-
-    Ok(())
 }
