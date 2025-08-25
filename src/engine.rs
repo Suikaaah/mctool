@@ -136,7 +136,7 @@ impl Engine {
                     self.dim()?;
                     self.draw_font_centered(
                         &fonts.large,
-                        &format!("Filename:[{name}]"),
+                        &format!("Filename: [{name}]"),
                         Self::CENTER,
                         Color::WHITE,
                     )?;
