@@ -33,9 +33,13 @@ You can change these in `Keys` at `src/state/key.rs`.
 | View Previous Recipe (based on the first character) | Left Control + \<View Previous Recipe\> |
 | View Next Recipe (based on the first character) | Left Control + \<View Next Recipe\> |
 
+## Note
+- A resolution of 1920 * 1080 and "Large" GUIs are expected
+- Window needs to be focused upon recipe save in order to prevent the game from making unwanted reactions
+- The latest screenshot and the second latest will be used to make thumbnails of your inventory and the
+  resulting item, respectively
+
 ## Usage
-Note: A resolution of 1920 * 1080 and "Large" GUIs are expected. \
-Also, the window needs to be focused upon recipe save because the game would go nuts otherwise.
 - Set `SCREENSHOTS` and `RECIPES` in `src/state.rs` for your environment
 - `cargo run --release`
 
