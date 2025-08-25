@@ -182,6 +182,10 @@ impl State {
         }
 
         if self.key_abort.is_pressed() {
+            if matches!(self.detail, Detail::Naming { .. }) {
+                self.is_locked = false;
+            }
+
             self.detail = Detail::Idle;
         }
 
@@ -464,6 +468,7 @@ impl State {
             }
         };
 
+        update_nolock(&mut self.key_abort);
         update_nolock(&mut self.key_lock);
         update_nolock(&mut self.key_cancel_dc);
         update_nolock(&mut self.key_confirm);
@@ -487,7 +492,6 @@ impl State {
         update(&mut self.key_double_click);
         update(&mut self.key_begin_trade);
         update(&mut self.key_end_trade);
-        update(&mut self.key_abort);
         update(&mut self.key_prev_skip);
         update(&mut self.key_next_skip);
     }

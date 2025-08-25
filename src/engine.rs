@@ -30,10 +30,11 @@ impl Engine {
     const TITLE: &str = "mctool";
     const PADDING: u32 = 32;
     const WIDTH: u32 = io::INV_WIDTH + io::ITEM_WIDTH + Self::PADDING * 3;
-    const HEIGHT: u32 = io::INV_HEIGHT + Self::PADDING * 2 + Self::TAB_HEIGHT;
+    const HEIGHT: u32 = io::INV_HEIGHT + Self::PADDING * 3 + Self::TAB_HEIGHT + Self::PATH_HEIGHT;
     const CENTER: (i32, i32) = (Self::WIDTH as i32 / 2, Self::HEIGHT as i32 / 2);
     const TAB_WIDTH: u32 = 110;
     const TAB_HEIGHT: u32 = 24;
+    const PATH_HEIGHT: u32 = 6;
     const POLLING_RATE: Duration = Duration::from_millis(1);
     const BACKGROUND: Color = Color::RGB(0x4F, 0x4F, 0x4F);
     const TAB_BACKGROUND: Color = Color::RGB(0x38, 0x38, 0x38);
@@ -80,7 +81,7 @@ impl Engine {
             self.canvas.clear();
 
             match state.detail() {
-                Detail::Idle => self.draw_thumbnail(state),
+                Detail::Idle => self.draw_thumbnail(state, font),
                 Detail::Recording { .. } => {
                     self.draw_font_centered(font, "Recording...", Self::CENTER, Color::WHITE)
                 }
@@ -133,10 +134,6 @@ impl Engine {
 
             self.draw_lock(state, font)?;
 
-            self.canvas
-                .window_mut()
-                .set_title(&format!("{} - {}", Self::TITLE, state.recipes))?;
-
             self.canvas.present();
         }
 
@@ -185,41 +182,60 @@ impl Engine {
         )
     }
 
-    fn draw_thumbnail(&mut self, state: &State) -> Result<()> {
-        if let Some(path) = state.recipes.get_path()? {
-            {
-                let texture = self
-                    .tex_creator
-                    .load_texture(path.join(io::FILENAME_THUMBNAIL))
-                    .map_err_anyhow()?;
+    fn draw_thumbnail(&mut self, state: &State, font: &Font) -> Result<()> {
+        match state.recipes.get_path()? {
+            None => self.draw_font_centered(
+                font,
+                &state.recipes.to_string(),
+                Self::CENTER,
+                Color::WHITE,
+            ),
+            Some(path) => {
+                self.draw_font_centered(
+                    font,
+                    &state.recipes.to_string(),
+                    (
+                        Self::WIDTH as i32 / 2,
+                        Self::PADDING as i32 + Self::PATH_HEIGHT as i32 / 2,
+                    ),
+                    Color::WHITE,
+                )?;
 
-                let dst = Rect::new(
-                    Self::PADDING as i32,
-                    Self::PADDING as i32,
-                    io::INV_WIDTH,
-                    io::INV_HEIGHT,
-                );
+                {
+                    let texture = self
+                        .tex_creator
+                        .load_texture(path.join(io::FILENAME_THUMBNAIL))
+                        .map_err_anyhow()?;
 
-                self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
-            }
-            {
-                let texture = self
-                    .tex_creator
-                    .load_texture(path.join(io::FILENAME_ITEM))
-                    .map_err_anyhow()?;
+                    let dst = Rect::new(
+                        Self::PADDING as i32,
+                        (Self::PATH_HEIGHT + Self::PADDING * 2) as i32,
+                        io::INV_WIDTH,
+                        io::INV_HEIGHT,
+                    );
 
-                let dst = Rect::new(
-                    Self::WIDTH as i32 - Self::PADDING as i32 - io::ITEM_WIDTH as i32,
-                    Self::PADDING as i32 + io::INV_HEIGHT as i32 / 2 - io::ITEM_HEIGHT as i32 / 2,
-                    io::ITEM_WIDTH,
-                    io::ITEM_HEIGHT,
-                );
+                    self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
+                }
+                {
+                    let texture = self
+                        .tex_creator
+                        .load_texture(path.join(io::FILENAME_ITEM))
+                        .map_err_anyhow()?;
 
-                self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
+                    let dst = Rect::new(
+                        Self::WIDTH as i32 - Self::PADDING as i32 - io::ITEM_WIDTH as i32,
+                        (Self::PATH_HEIGHT + Self::PADDING * 2) as i32 + io::INV_HEIGHT as i32 / 2
+                            - io::ITEM_HEIGHT as i32 / 2,
+                        io::ITEM_WIDTH,
+                        io::ITEM_HEIGHT,
+                    );
+
+                    self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
+                }
+
+                Ok(())
             }
         }
-
-        Ok(())
     }
 
     fn draw_font_centered(

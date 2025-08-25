@@ -110,7 +110,7 @@ impl fmt::Display for Recipes {
             .and_then(|name| {
                 let index = self.index? + 1;
                 let len = self.paths.len();
-                Some(format!("{name} [{index}/{len}]"))
+                Some(format!("◀ {name} [{index}/{len}] ▶"))
             })
             .unwrap_or_else(|| String::from("no recipes found"));
 
