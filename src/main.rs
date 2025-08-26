@@ -2,19 +2,19 @@
 
 mod coord;
 mod engine;
-mod font_engine;
 mod grid;
 mod io;
 mod map_err_anyhow;
+mod resources;
 mod state;
 
 fn detail() -> anyhow::Result<()> {
-    use {engine::Engine, font_engine::FontEngine, state::State};
+    use {engine::Engine, resources::Resources, state::State};
 
     let mut engine = Engine::new()?;
-    let mut state = State::new()?;
-    let font_engine = FontEngine::new()?;
-    let fonts = font_engine.load_fonts()?;
+    let resources = Resources::new(engine.tex_creator())?;
+    let mut state = State::new(&resources)?;
+    let fonts = resources.load_fonts()?;
 
     engine.start_text_input();
 
@@ -33,7 +33,7 @@ fn detail() -> anyhow::Result<()> {
             }
         }
 
-        state.step()?;
+        state.step(&resources)?;
         engine.draw(&state, &fonts)?;
         Engine::sleep();
     }

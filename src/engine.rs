@@ -1,14 +1,14 @@
 use crate::{
-    font_engine::Fonts,
     io,
     map_err_anyhow::MapErrAnyhow,
+    resources::Fonts,
+    resources::Textures,
     state::{State, detail::Detail},
 };
 use anyhow::Result;
 use sdl2::{
     EventPump, Sdl, VideoSubsystem,
     event::Event,
-    image::LoadTexture,
     pixels::Color,
     rect::Rect,
     render::{BlendMode, Canvas, TextureCreator},
@@ -20,7 +20,6 @@ use std::time::Duration;
 
 pub struct Engine {
     frame_initialized: bool,
-    tex_creator: TextureCreator<WindowContext>,
     canvas: Canvas<Window>,
     video: VideoSubsystem,
     event_pump: EventPump,
@@ -60,16 +59,17 @@ impl Engine {
 
         canvas.set_blend_mode(BlendMode::Blend);
 
-        let tex_creator = canvas.texture_creator();
-
         Ok(Self {
             frame_initialized: false,
-            tex_creator,
             canvas,
             video,
             event_pump,
             _context: context,
         })
+    }
+
+    pub fn tex_creator(&self) -> TextureCreator<WindowContext> {
+        self.canvas.texture_creator()
     }
 
     pub fn poll_event(&mut self) -> Option<Event> {
@@ -214,14 +214,14 @@ impl Engine {
     }
 
     fn draw_thumbnail(&mut self, state: &State, fonts: &Fonts) -> Result<()> {
-        match state.recipes.get_path()? {
+        match &state.recipes.textures() {
             None => self.draw_font_centered(
                 &fonts.large,
                 &state.recipes.to_string(),
                 Self::CENTER,
                 Color::WHITE,
             ),
-            Some(path) => {
+            Some(Textures { thumbnail, item }) => {
                 self.draw_font_centered(
                     &fonts.large,
                     &state.recipes.to_string(),
@@ -233,11 +233,6 @@ impl Engine {
                 )?;
 
                 {
-                    let texture = self
-                        .tex_creator
-                        .load_texture(path.join(io::FILENAME_THUMBNAIL))
-                        .map_err_anyhow()?;
-
                     let dst = Rect::new(
                         Self::PADDING as i32,
                         (Self::PATH_HEIGHT + Self::PADDING * 2) as i32,
@@ -245,14 +240,9 @@ impl Engine {
                         io::INV_HEIGHT,
                     );
 
-                    self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
+                    self.canvas.copy(thumbnail, None, dst).map_err_anyhow()?;
                 }
                 {
-                    let texture = self
-                        .tex_creator
-                        .load_texture(path.join(io::FILENAME_ITEM))
-                        .map_err_anyhow()?;
-
                     let dst = Rect::new(
                         Self::WIDTH as i32 - Self::PADDING as i32 - io::ITEM_WIDTH as i32,
                         (Self::PATH_HEIGHT + Self::PADDING * 2) as i32 + io::INV_HEIGHT as i32 / 2
@@ -261,7 +251,7 @@ impl Engine {
                         io::ITEM_HEIGHT,
                     );
 
-                    self.canvas.copy(&texture, None, dst).map_err_anyhow()?;
+                    self.canvas.copy(item, None, dst).map_err_anyhow()?;
                 }
 
                 Ok(())
@@ -287,7 +277,8 @@ impl Engine {
     }
 
     fn draw_surface(&mut self, surface: Surface, (x, y): (i32, i32)) -> Result<()> {
-        let texture = surface.as_texture(&self.tex_creator)?;
+        let tex_creator = self.canvas.texture_creator();
+        let texture = surface.as_texture(&tex_creator)?;
 
         self.canvas
             .copy(

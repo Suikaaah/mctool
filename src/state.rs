@@ -7,6 +7,7 @@ use crate::{
     coord::Coord,
     grid::Grid,
     io,
+    resources::Resources,
     state::{
         detail::{Cursor, Detail, TradeFirst, TradeSecond},
         recipes::Recipes,
@@ -18,30 +19,30 @@ use spam::Spam;
 use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse as kam;
 
-pub struct State {
+pub struct State<'tex> {
     detail: Detail,
     draw_required: bool,
     keys: Keys,
     pub spam_left: Spam,
     pub spam_right: Spam,
     pub spam_space: Spam,
-    pub recipes: Recipes,
+    pub recipes: Recipes<'tex>,
     double_click_active: bool,
     double_click_origin: Option<Instant>,
     is_locked: bool,
 }
 
-impl State {
+impl<'tex> State<'tex> {
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
     const INT_PLAY: Duration = Duration::from_millis(7);
     const INT_DOUBLE_CLICK: Duration = Duration::from_millis(50);
-    const SCREENSHOTS: &str =
+    const SCREENSHOTS: &'static str =
         r"C:\Users\Suika\AppData\Roaming\.minecraft\versions\1.8.9-OptiFine_HD_U_M5\screenshots";
-    const RECIPES: &str = r"D:\rust\mctool\recipes";
+    const RECIPES: &'static str = r"D:\rust\mctool\recipes";
 
-    pub fn new() -> Result<Self> {
+    pub fn new(resources: &'tex Resources) -> Result<Self> {
         use io::MouseButton;
 
         let spam_left = Spam::new(
@@ -69,7 +70,7 @@ impl State {
             spam_left,
             spam_right,
             spam_space,
-            recipes: Recipes::new(io::recipes(Self::RECIPES)?)?,
+            recipes: Recipes::new(io::recipes(Self::RECIPES)?, resources)?,
             double_click_active: false,
             double_click_origin: None,
             is_locked: false,
@@ -120,7 +121,7 @@ impl State {
         }
     }
 
-    pub fn step(&mut self) -> Result<()> {
+    pub fn step(&mut self, resources: &'tex Resources) -> Result<()> {
         self.draw_required = false;
         self.update_keys();
         self.toggle_spams();
@@ -167,7 +168,7 @@ impl State {
         let detail_taken = std::mem::replace(&mut self.detail, Detail::Idle);
 
         self.detail = match detail_taken {
-            Detail::Idle => self.on_idle(),
+            Detail::Idle => self.on_idle(resources),
             Detail::Recording { clicks, count } => self.on_record(clicks, count),
             Detail::Naming {
                 clicks,
@@ -178,7 +179,7 @@ impl State {
                     self.draw_required = true;
                 }
 
-                self.on_name(clicks, name)
+                self.on_name(clicks, name, resources)
             }
             Detail::Playing { clicks, origin } => self.on_play(clicks, origin),
             Detail::TradingFirst {
@@ -196,20 +197,20 @@ impl State {
         Ok(())
     }
 
-    fn on_idle(&mut self) -> Result<Detail> {
+    fn on_idle(&mut self, resources: &'tex Resources) -> Result<Detail> {
         if self.keys.prev.is_pressed() {
             if self.keys.prev_skip.is_pressed() {
-                self.recipes.decrement_skip();
+                self.recipes.decrement_skip(resources)?;
             } else {
-                self.recipes.decrement();
+                self.recipes.decrement(resources)?;
             }
         }
 
         if self.keys.next.is_pressed() {
             if self.keys.next_skip.is_pressed() {
-                self.recipes.increment_skip();
+                self.recipes.increment_skip(resources)?;
             } else {
-                self.recipes.increment();
+                self.recipes.increment(resources)?;
             }
         }
 
@@ -274,7 +275,12 @@ impl State {
         Ok(retval)
     }
 
-    fn on_name(&mut self, clicks: Vec<Grid>, name: String) -> Result<Detail> {
+    fn on_name(
+        &mut self,
+        clicks: Vec<Grid>,
+        name: String,
+        resources: &'tex Resources,
+    ) -> Result<Detail> {
         let retval = if self.keys.confirm.is_pressed() {
             match io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, &clicks, &name) {
                 Err(e) => {
@@ -287,7 +293,7 @@ impl State {
                     }
                 }
                 Ok(_) => {
-                    self.recipes = Recipes::new(io::recipes(Self::RECIPES)?)?;
+                    self.recipes = Recipes::new(io::recipes(Self::RECIPES)?, resources)?;
                     self.is_locked = false;
 
                     Detail::Idle

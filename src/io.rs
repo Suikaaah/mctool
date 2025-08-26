@@ -153,7 +153,7 @@ where
     let result = File::create_new(dir.join(FILENAME_CLICKS))
         .map_err_anyhow()
         .and_then(|json| {
-            crop_latest_png(
+            crop_latest_pngs(
                 screenshots,
                 dir.join(FILENAME_THUMBNAIL),
                 dir.join(FILENAME_ITEM),
@@ -208,7 +208,7 @@ where
     Ok(())
 }
 
-fn crop_latest_png<P1, P2, P3>(search_in: P1, dst_inv: P2, dst_item: P3) -> Result<()>
+fn crop_latest_pngs<P1, P2, P3>(search_in: P1, dst_inv: P2, dst_item: P3) -> Result<()>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,

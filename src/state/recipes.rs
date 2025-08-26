@@ -1,13 +1,15 @@
+use crate::resources::{Resources, Textures};
 use anyhow::{Result, anyhow};
 use std::{fmt, path::PathBuf};
 
-pub struct Recipes {
+pub struct Recipes<'tex> {
     paths: Box<[(PathBuf, char)]>,
     index: Option<usize>,
+    textures: Option<Textures<'tex>>,
 }
 
-impl Recipes {
-    pub fn new(paths: Box<[PathBuf]>) -> Result<Self> {
+impl<'tex> Recipes<'tex> {
+    pub fn new(paths: Box<[PathBuf]>, resources: &'tex Resources) -> Result<Self> {
         let paths_opt: Option<Box<[(PathBuf, char)]>> = paths
             .into_iter()
             .map(|path| {
@@ -21,42 +23,76 @@ impl Recipes {
 
         let index = Self::last_index(&paths);
 
-        Ok(Self { paths, index })
+        let textures = match Self::get_ext(&paths, index)? {
+            None => None,
+            Some((path, _)) => Some(resources.load_textures(path)?),
+        };
+
+        Ok(Self {
+            paths,
+            index,
+            textures,
+        })
+    }
+
+    pub const fn textures(&self) -> Option<&Textures<'_>> {
+        self.textures.as_ref()
+    }
+
+    pub const fn len(&self) -> usize {
+        self.paths.len()
     }
 
     pub fn get_path(&self) -> Result<Option<&PathBuf>> {
         self.get().map(|opt| opt.map(|(path, _)| path))
     }
 
-    pub const fn increment(&mut self) {
+    pub fn increment(&mut self, resources: &'tex Resources) -> Result<()> {
+        self.increment_detail();
+        self.update_textures(resources)
+    }
+
+    pub fn decrement(&mut self, resources: &'tex Resources) -> Result<()> {
+        self.decrement_detail();
+        self.update_textures(resources)
+    }
+
+    pub fn increment_skip(&mut self, resources: &'tex Resources) -> Result<()> {
+        self.skip_detail(Self::increment_detail);
+        self.update_textures(resources)
+    }
+
+    pub fn decrement_skip(&mut self, resources: &'tex Resources) -> Result<()> {
+        self.decrement_detail();
+        self.skip_detail(Self::decrement_detail);
+        self.increment_detail();
+        self.update_textures(resources)
+    }
+
+    pub fn update_textures(&mut self, resources: &'tex Resources) -> Result<()> {
+        self.textures = match self.get_path()? {
+            None => None,
+            Some(path) => Some(resources.load_textures(path)?),
+        };
+
+        Ok(())
+    }
+
+    const fn increment_detail(&mut self) {
+        let len = self.len();
+
         if let Some(index) = &mut self.index {
-            *index = if *index + 1 == self.paths.len() {
-                0
-            } else {
-                *index + 1
-            };
+            *index = if *index + 1 == len { 0 } else { *index + 1 };
         }
     }
 
-    pub const fn decrement(&mut self) {
+    const fn decrement_detail(&mut self) {
+        let len = self.len();
+
         if let Some(index) = &mut self.index {
-            *index = if *index == 0 {
-                // since paths' length is fixed, len is always non-zero
-                self.paths.len() - 1
-            } else {
-                *index - 1
-            };
+            // 0 < len
+            *index = if *index == 0 { len - 1 } else { *index - 1 };
         }
-    }
-
-    pub fn increment_skip(&mut self) {
-        self.skip_detail(Self::increment);
-    }
-
-    pub fn decrement_skip(&mut self) {
-        self.decrement();
-        self.skip_detail(Self::decrement);
-        self.increment();
     }
 
     fn skip_detail(&mut self, mut f: impl FnMut(&mut Self)) {
@@ -72,10 +108,16 @@ impl Recipes {
     }
 
     fn get(&self) -> Result<Option<(&PathBuf, char)>> {
-        match self.index {
+        Self::get_ext(&self.paths, self.index)
+    }
+
+    fn get_ext(
+        paths: &[(PathBuf, char)],
+        index: Option<usize>,
+    ) -> Result<Option<(&PathBuf, char)>> {
+        match index {
             None => Ok(None),
-            Some(index) => self
-                .paths
+            Some(index) => paths
                 .get(index)
                 .ok_or_else(|| anyhow!("this should not be reachable. "))
                 .map(|(path, first_character)| Some((path, *first_character))),
@@ -100,7 +142,7 @@ impl Recipes {
     }
 }
 
-impl fmt::Display for Recipes {
+impl fmt::Display for Recipes<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = self
             .get_path()
@@ -109,7 +151,7 @@ impl fmt::Display for Recipes {
             .and_then(|path| path.file_name().and_then(|osstr| osstr.to_str()))
             .and_then(|name| {
                 let index = self.index? + 1;
-                let len = self.paths.len();
+                let len = self.len();
                 Some(format!("◀ {name} [{index}/{len}] ▶"))
             })
             .unwrap_or_else(|| String::from("no recipes found"));
