@@ -136,7 +136,7 @@ impl Engine {
                     self.dim()?;
                     self.draw_font_centered(
                         &fonts.large,
-                        &format!("Filename: [{name}]"),
+                        &format!("Save as: [{name}]"),
                         Self::CENTER,
                         Color::WHITE,
                     )?;
@@ -155,6 +155,24 @@ impl Engine {
                     self.draw_font_centered(
                         &fonts.large,
                         "Trading...",
+                        Self::CENTER,
+                        Color::WHITE,
+                    )?;
+                }
+                Detail::Deleting => {
+                    self.dim()?;
+                    self.draw_font_centered(
+                        &fonts.large,
+                        "Delete: Are you sure?",
+                        Self::CENTER,
+                        Color::WHITE,
+                    )?;
+                }
+                Detail::Renaming { name, .. } => {
+                    self.dim()?;
+                    self.draw_font_centered(
+                        &fonts.large,
+                        &format!("Rename as: [{name}]"),
                         Self::CENTER,
                         Color::WHITE,
                     )?;

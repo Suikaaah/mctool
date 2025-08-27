@@ -62,6 +62,8 @@ pub struct Keys {
     pub confirm: Key,
     pub prev_skip: Key,
     pub next_skip: Key,
+    pub delete: Key,
+    pub rename: Key,
 }
 
 impl Keys {
@@ -83,6 +85,8 @@ impl Keys {
     const CONFIRM: VIRTUAL_KEY = kam::VK_RETURN;
     const PREV_SKIP: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, Self::PREV];
     const NEXT_SKIP: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, Self::NEXT];
+    const DELETE: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, kam::VK_D];
+    const RENAME: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, kam::VK_A];
 
     pub fn new() -> Self {
         Self {
@@ -104,6 +108,8 @@ impl Keys {
             confirm: Key::single(Self::CONFIRM),
             prev_skip: Key::multiple(Self::PREV_SKIP),
             next_skip: Key::multiple(Self::NEXT_SKIP),
+            delete: Key::multiple(Self::DELETE),
+            rename: Key::multiple(Self::RENAME),
         }
     }
 }

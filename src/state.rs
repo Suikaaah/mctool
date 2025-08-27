@@ -16,23 +16,26 @@ use crate::{
 use anyhow::Result;
 use key::{Key, Keys};
 use spam::Spam;
-use std::time::{Duration, Instant};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 use windows::Win32::UI::Input::KeyboardAndMouse as kam;
 
-pub struct State<'tex> {
+pub struct State<'resources> {
     detail: Detail,
     draw_required: bool,
     keys: Keys,
     pub spam_left: Spam,
     pub spam_right: Spam,
     pub spam_space: Spam,
-    pub recipes: Recipes<'tex>,
+    pub recipes: Recipes<'resources>,
     double_click_active: bool,
     double_click_origin: Option<Instant>,
     is_locked: bool,
 }
 
-impl<'tex> State<'tex> {
+impl<'resources> State<'resources> {
     const INT_LEFT: Duration = Duration::from_millis(10);
     const INT_RIGHT: Duration = Duration::from_millis(10);
     const INT_SPACE: Duration = Duration::from_millis(50);
@@ -40,9 +43,8 @@ impl<'tex> State<'tex> {
     const INT_DOUBLE_CLICK: Duration = Duration::from_millis(50);
     const SCREENSHOTS: &'static str =
         r"C:\Users\Suika\AppData\Roaming\.minecraft\versions\1.8.9-OptiFine_HD_U_M5\screenshots";
-    const RECIPES: &'static str = r"D:\rust\mctool\recipes";
 
-    pub fn new(resources: &'tex Resources) -> Result<Self> {
+    pub fn new(resources: &'resources Resources) -> Result<Self> {
         use io::MouseButton;
 
         let spam_left = Spam::new(
@@ -70,7 +72,7 @@ impl<'tex> State<'tex> {
             spam_left,
             spam_right,
             spam_space,
-            recipes: Recipes::new(io::recipes(Self::RECIPES)?, resources)?,
+            recipes: Recipes::new(resources)?,
             double_click_active: false,
             double_click_origin: None,
             is_locked: false,
@@ -102,6 +104,10 @@ impl<'tex> State<'tex> {
             name,
             draw_required,
             ..
+        }
+        | Detail::Renaming {
+            name,
+            draw_required,
         } = &mut self.detail
         {
             *name += text;
@@ -114,6 +120,10 @@ impl<'tex> State<'tex> {
             name,
             draw_required,
             ..
+        }
+        | Detail::Renaming {
+            name,
+            draw_required,
         } = &mut self.detail
         {
             name.pop();
@@ -121,11 +131,48 @@ impl<'tex> State<'tex> {
         }
     }
 
-    pub fn step(&mut self, resources: &'tex Resources) -> Result<()> {
+    pub fn step(&mut self, resources: &'resources Resources) -> Result<()> {
         self.draw_required = false;
         self.update_keys();
         self.toggle_spams();
+        self.on_step();
 
+        self.detail = match std::mem::take(&mut self.detail) {
+            Detail::Idle => self.on_idle(resources),
+            Detail::Recording { clicks, count } => self.on_record(clicks, count),
+            Detail::Naming {
+                clicks,
+                name,
+                draw_required,
+            } => {
+                self.draw_required |= draw_required;
+                self.on_name(clicks, name, resources)
+            }
+            Detail::Playing { clicks, origin } => self.on_play(clicks, origin),
+            Detail::TradingFirst {
+                state,
+                position,
+                origin,
+            } => self.on_trade_first(state, position, origin),
+            Detail::TradingSecond {
+                state,
+                position,
+                origin,
+            } => self.on_trade_second(state, position, origin),
+            Detail::Deleting => self.on_delete(resources),
+            Detail::Renaming {
+                name,
+                draw_required,
+            } => {
+                self.draw_required |= draw_required;
+                self.on_rename(name, resources)
+            }
+        }?;
+
+        Ok(())
+    }
+
+    fn on_step(&mut self) {
         if self.keys.lock.is_pressed() {
             self.is_locked ^= true;
         }
@@ -157,47 +204,14 @@ impl<'tex> State<'tex> {
             self.double_click_origin = None;
         }
 
-        {
-            let now = Instant::now();
+        let now = Instant::now();
 
-            self.spam_left.step(now);
-            self.spam_right.step(now);
-            self.spam_space.step(now);
-        }
-
-        let detail_taken = std::mem::replace(&mut self.detail, Detail::Idle);
-
-        self.detail = match detail_taken {
-            Detail::Idle => self.on_idle(resources),
-            Detail::Recording { clicks, count } => self.on_record(clicks, count),
-            Detail::Naming {
-                clicks,
-                name,
-                draw_required,
-            } => {
-                if draw_required {
-                    self.draw_required = true;
-                }
-
-                self.on_name(clicks, name, resources)
-            }
-            Detail::Playing { clicks, origin } => self.on_play(clicks, origin),
-            Detail::TradingFirst {
-                state,
-                position,
-                origin,
-            } => self.on_trade_first(state, position, origin),
-            Detail::TradingSecond {
-                state,
-                position,
-                origin,
-            } => self.on_trade_second(state, position, origin),
-        }?;
-
-        Ok(())
+        self.spam_left.step(now);
+        self.spam_right.step(now);
+        self.spam_space.step(now);
     }
 
-    fn on_idle(&mut self, resources: &'tex Resources) -> Result<Detail> {
+    fn on_idle(&mut self, resources: &'resources Resources) -> Result<Detail> {
         if self.keys.prev.is_pressed() {
             if self.keys.prev_skip.is_pressed() {
                 self.recipes.decrement_skip(resources)?;
@@ -236,6 +250,13 @@ impl<'tex> State<'tex> {
                     .map(|grid| (grid, Cursor::New))
                     .collect(),
                 origin: Instant::now(),
+            }
+        } else if self.keys.delete.is_pressed() {
+            Detail::Deleting
+        } else if self.keys.rename.is_pressed() {
+            Detail::Renaming {
+                name: String::new(),
+                draw_required: false,
             }
         } else {
             Detail::Idle
@@ -279,10 +300,10 @@ impl<'tex> State<'tex> {
         &mut self,
         clicks: Vec<Grid>,
         name: String,
-        resources: &'tex Resources,
+        resources: &'resources Resources,
     ) -> Result<Detail> {
         let retval = if self.keys.confirm.is_pressed() {
-            match io::save_clicks(Self::SCREENSHOTS, Self::RECIPES, &clicks, &name) {
+            match io::save_clicks(Self::SCREENSHOTS, Recipes::RECIPES, &clicks, &name) {
                 Err(e) => {
                     io::message_box(format!("Reason: {e}"), "Failed to crate recipe")?;
 
@@ -293,7 +314,7 @@ impl<'tex> State<'tex> {
                     }
                 }
                 Ok(_) => {
-                    self.recipes = Recipes::new(io::recipes(Self::RECIPES)?, resources)?;
+                    self.reload_recipes(resources)?;
                     self.is_locked = false;
 
                     Detail::Idle
@@ -419,6 +440,47 @@ impl<'tex> State<'tex> {
         Ok(retval)
     }
 
+    fn on_delete(&mut self, resources: &'resources Resources) -> Result<Detail> {
+        let retval = if self.keys.confirm.is_pressed() {
+            match self.recipes.delete(resources) {
+                Err(e) => {
+                    io::message_box(format!("Reason: {e}"), "Failed to delete recipe")?;
+                    Detail::Deleting
+                }
+                Ok(_) => Detail::Idle,
+            }
+        } else {
+            Detail::Deleting
+        };
+
+        Ok(retval)
+    }
+
+    fn on_rename(&mut self, name: String, resources: &'resources Resources) -> Result<Detail> {
+        let retval = if self.keys.confirm.is_pressed() {
+            match self
+                .recipes
+                .rename(Path::new(Recipes::RECIPES).join(&name), resources)
+            {
+                Err(e) => {
+                    io::message_box(format!("Reason: {e}"), "Failed to rename recipe")?;
+                    Detail::Renaming {
+                        name,
+                        draw_required: false,
+                    }
+                }
+                Ok(_) => Detail::Idle,
+            }
+        } else {
+            Detail::Renaming {
+                name,
+                draw_required: false,
+            }
+        };
+
+        Ok(retval)
+    }
+
     fn update_keys(&mut self) {
         // does not count as a modification which needs redraw
         self.keys.click.update(false);
@@ -458,6 +520,8 @@ impl<'tex> State<'tex> {
         update(&mut self.keys.end_trade);
         update(&mut self.keys.prev_skip);
         update(&mut self.keys.next_skip);
+        update(&mut self.keys.delete);
+        update(&mut self.keys.rename);
     }
 
     fn toggle_spams(&mut self) {
@@ -474,5 +538,10 @@ impl<'tex> State<'tex> {
 
     fn double_click_disable_condition(&self) -> bool {
         io::is_down(Keys::CANCEL_DC) || self.spam_right.is_active()
+    }
+
+    fn reload_recipes(&mut self, resources: &'resources Resources) -> Result<()> {
+        self.recipes = Recipes::new(resources)?;
+        Ok(())
     }
 }

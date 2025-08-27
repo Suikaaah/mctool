@@ -1,20 +1,34 @@
-use crate::resources::{Resources, Textures};
-use anyhow::{Result, anyhow};
-use std::{fmt, path::PathBuf};
+use crate::{
+    io,
+    resources::{Resources, Textures},
+};
+use anyhow::{Result, anyhow, bail};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
 
-pub struct Recipes<'tex> {
-    paths: Box<[(PathBuf, char)]>,
+#[derive(Default)]
+pub struct Recipes<'resources> {
+    paths: Box<[PathChar]>,
     index: Option<usize>,
-    textures: Option<Textures<'tex>>,
+    textures: Option<Textures<'resources>>,
 }
 
-impl<'tex> Recipes<'tex> {
-    pub fn new(paths: Box<[PathBuf]>, resources: &'tex Resources) -> Result<Self> {
-        let paths_opt: Option<Box<[(PathBuf, char)]>> = paths
+struct PathChar {
+    path: PathBuf,
+    first_char: char,
+}
+
+impl<'resources> Recipes<'resources> {
+    pub const RECIPES: &'static str = r"D:\rust\mctool\recipes";
+
+    pub fn new(resources: &'resources Resources) -> Result<Self> {
+        let paths_opt: Option<Box<[PathChar]>> = io::recipes(Self::RECIPES)?
             .into_iter()
             .map(|path| {
-                let first_character = path.file_name()?.to_str()?.chars().next()?;
-                Some((path, first_character))
+                let first_char = path.file_name()?.to_str()?.chars().next()?;
+                Some(PathChar { path, first_char })
             })
             .collect();
 
@@ -25,7 +39,7 @@ impl<'tex> Recipes<'tex> {
 
         let textures = match Self::get_ext(&paths, index)? {
             None => None,
-            Some((path, _)) => Some(resources.load_textures(path)?),
+            Some(PathChar { path, .. }) => Some(resources.load_textures(path)?),
         };
 
         Ok(Self {
@@ -44,32 +58,32 @@ impl<'tex> Recipes<'tex> {
     }
 
     pub fn get_path(&self) -> Result<Option<&PathBuf>> {
-        self.get().map(|opt| opt.map(|(path, _)| path))
+        self.get().map(|opt| opt.map(|PathChar { path, .. }| path))
     }
 
-    pub fn increment(&mut self, resources: &'tex Resources) -> Result<()> {
+    pub fn increment(&mut self, resources: &'resources Resources) -> Result<()> {
         self.increment_detail();
         self.update_textures(resources)
     }
 
-    pub fn decrement(&mut self, resources: &'tex Resources) -> Result<()> {
+    pub fn decrement(&mut self, resources: &'resources Resources) -> Result<()> {
         self.decrement_detail();
         self.update_textures(resources)
     }
 
-    pub fn increment_skip(&mut self, resources: &'tex Resources) -> Result<()> {
+    pub fn increment_skip(&mut self, resources: &'resources Resources) -> Result<()> {
         self.skip_detail(Self::increment_detail);
         self.update_textures(resources)
     }
 
-    pub fn decrement_skip(&mut self, resources: &'tex Resources) -> Result<()> {
+    pub fn decrement_skip(&mut self, resources: &'resources Resources) -> Result<()> {
         self.decrement_detail();
         self.skip_detail(Self::decrement_detail);
         self.increment_detail();
         self.update_textures(resources)
     }
 
-    pub fn update_textures(&mut self, resources: &'tex Resources) -> Result<()> {
+    pub fn update_textures(&mut self, resources: &'resources Resources) -> Result<()> {
         self.textures = match self.get_path()? {
             None => None,
             Some(path) => Some(resources.load_textures(path)?),
@@ -95,41 +109,66 @@ impl<'tex> Recipes<'tex> {
         }
     }
 
+    pub fn delete(&mut self, resources: &'resources Resources) -> Result<()> {
+        if let Some(path) = self.get_path()? {
+            std::fs::remove_dir_all(path)?;
+            *self = Self::new(resources)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn rename(&mut self, to: impl AsRef<Path>, resources: &'resources Resources) -> Result<()> {
+        if let Some(from) = self.get_path()? {
+            if from == to.as_ref() {
+                bail!("rename not needed");
+            }
+
+            std::fs::rename(from, to)?;
+            *self = Self::new(resources)?;
+        }
+
+        Ok(())
+    }
+
     fn skip_detail(&mut self, mut f: impl FnMut(&mut Self)) {
         if !self.ignore_skip()
-            && let Some((_, sample)) = self.get().ok().flatten()
+            && let Some(PathChar {
+                first_char: sample, ..
+            }) = self.get().ok().flatten()
         {
-            while let Some((_, first_character)) = self.get().ok().flatten()
-                && sample == first_character
+            let sample = *sample;
+
+            while let Some(PathChar { first_char, .. }) = self.get().ok().flatten()
+                && sample == *first_char
             {
                 f(self);
             }
         }
     }
 
-    fn get(&self) -> Result<Option<(&PathBuf, char)>> {
+    fn get(&self) -> Result<Option<&PathChar>> {
         Self::get_ext(&self.paths, self.index)
     }
 
-    fn get_ext(
-        paths: &[(PathBuf, char)],
-        index: Option<usize>,
-    ) -> Result<Option<(&PathBuf, char)>> {
+    fn get_ext(paths: &[PathChar], index: Option<usize>) -> Result<Option<&PathChar>> {
         match index {
             None => Ok(None),
             Some(index) => paths
                 .get(index)
                 .ok_or_else(|| anyhow!("this should not be reachable. "))
-                .map(|(path, first_character)| Some((path, *first_character))),
+                .map(Some),
         }
     }
 
     fn ignore_skip(&self) -> bool {
         match self.paths.first() {
-            Some((_, sample)) => self
+            Some(PathChar {
+                first_char: sample, ..
+            }) => self
                 .paths
                 .iter()
-                .all(|(_, first_character)| first_character == sample),
+                .all(|PathChar { first_char, .. }| first_char == sample),
             None => true,
         }
     }

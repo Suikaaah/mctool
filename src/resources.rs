@@ -13,14 +13,14 @@ pub struct Resources {
     tex_creator: TextureCreator<WindowContext>,
 }
 
-pub struct Fonts<'ttf> {
-    pub regular: Font<'ttf, 'static>,
-    pub large: Font<'ttf, 'static>,
+pub struct Fonts<'resources> {
+    pub regular: Font<'resources, 'static>,
+    pub large: Font<'resources, 'static>,
 }
 
-pub struct Textures<'creator> {
-    pub thumbnail: Texture<'creator>,
-    pub item: Texture<'creator>,
+pub struct Textures<'resources> {
+    pub thumbnail: Texture<'resources>,
+    pub item: Texture<'resources>,
 }
 
 impl Resources {

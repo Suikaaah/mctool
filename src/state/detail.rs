@@ -26,6 +26,11 @@ pub enum Detail {
         position: (i32, i32),
         origin: Instant,
     },
+    Deleting,
+    Renaming {
+        name: String,
+        draw_required: bool,
+    },
 }
 
 pub enum Cursor {
@@ -45,4 +50,10 @@ pub enum TradeSecond {
     RightClicked,
     MovedToLeft,
     LeftClicked,
+}
+
+impl Default for Detail {
+    fn default() -> Self {
+        Self::Idle
+    }
 }
