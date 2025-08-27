@@ -85,8 +85,8 @@ impl Keys {
     const CONFIRM: VIRTUAL_KEY = kam::VK_RETURN;
     const PREV_SKIP: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, Self::PREV];
     const NEXT_SKIP: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, Self::NEXT];
-    const DELETE: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, kam::VK_D];
-    const RENAME: &[VIRTUAL_KEY] = &[kam::VK_LCONTROL, kam::VK_A];
+    const DELETE: &[VIRTUAL_KEY] = &[kam::VK_LMENU, kam::VK_D];
+    const RENAME: &[VIRTUAL_KEY] = &[kam::VK_LMENU, kam::VK_A];
 
     pub fn new() -> Self {
         Self {

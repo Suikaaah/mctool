@@ -110,7 +110,7 @@ impl Engine {
             tab(
                 0,
                 "DOUBLE",
-                state.double_click_active_mapped(),
+                state.double_click_active(),
                 state.double_click_temporarily_disabled(),
             )?;
             tab(1, "LEFT", state.spam_left.is_active(), false)?;

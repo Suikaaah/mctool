@@ -88,10 +88,10 @@ impl<'resources> State<'resources> {
     }
 
     pub const fn is_locked(&self) -> bool {
-        self.is_locked
+        self.is_locked || matches!(self.detail, Detail::Naming { .. } | Detail::Renaming { .. })
     }
 
-    pub fn double_click_active_mapped(&self) -> bool {
+    pub fn double_click_active(&self) -> bool {
         self.double_click_active && !self.double_click_disable_condition()
     }
 
@@ -178,10 +178,6 @@ impl<'resources> State<'resources> {
         }
 
         if self.keys.abort.is_pressed() {
-            if matches!(self.detail, Detail::Naming { .. }) {
-                self.is_locked = false;
-            }
-
             self.detail = Detail::Idle;
         }
 
@@ -193,7 +189,7 @@ impl<'resources> State<'resources> {
             self.draw_required = true;
         }
 
-        if self.double_click_active_mapped() && self.keys.right_click.is_pressed() {
+        if self.double_click_active() && self.keys.right_click.is_pressed() {
             self.double_click_origin = Some(Instant::now());
         }
 
@@ -282,8 +278,6 @@ impl<'resources> State<'resources> {
         }
 
         let retval = if self.keys.record.is_pressed() {
-            self.is_locked = true;
-
             Detail::Naming {
                 clicks,
                 name: String::new(),
@@ -315,8 +309,6 @@ impl<'resources> State<'resources> {
                 }
                 Ok(_) => {
                     self.reload_recipes(resources)?;
-                    self.is_locked = false;
-
                     Detail::Idle
                 }
             }

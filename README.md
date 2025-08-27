@@ -29,9 +29,11 @@ You can change these in `Keys` at `src/state/key.rs`.
 | Abort | Backtick |
 | Toggle Lock | Left Control + Scroll Wheel Button |
 | Temporarily Disable ARC | Left Control |
-| Confirm (Save Recipe) | Return |
-| View Previous Recipe (based on the first character) | Left Control + \<View Previous Recipe\> |
-| View Next Recipe (based on the first character) | Left Control + \<View Next Recipe\> |
+| Confirm (Save/Delete/Rename Recipe) | Return |
+| View Previous Recipe (based on the first characters) | Left Control + \<View Previous Recipe\> |
+| View Next Recipe (based on the first characters) | Left Control + \<View Next Recipe\> |
+| Delete Recipe | Left Alt + D |
+| Rename Recipe | Left Alt + A |
 
 ## Note
 - A resolution of 1920 * 1080 and "Large" GUIs are expected
@@ -40,7 +42,7 @@ You can change these in `Keys` at `src/state/key.rs`.
   resulting item, respectively
 
 ## Usage
-- Set `SCREENSHOTS` and `RECIPES` in `src/state.rs` for your environment
+- Set `SCREENSHOTS` in `src/state.rs` and `RECIPES` in `src/state/recipes.rs` for your environment
 - `cargo run --release`
 
 ## Build/Run

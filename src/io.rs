@@ -174,8 +174,8 @@ pub fn load_clicks(path: impl AsRef<Path>) -> Result<Box<[Grid]>> {
     serde_json::from_reader(file).map_err_anyhow()
 }
 
-pub fn recipes(recipes: impl AsRef<Path>) -> Result<Box<[PathBuf]>> {
-    let mut boxed: Box<[PathBuf]> = std::fs::read_dir(recipes)?
+pub fn recipes(path: impl AsRef<Path>) -> Result<Box<[PathBuf]>> {
+    let mut boxed: Box<[PathBuf]> = std::fs::read_dir(path)?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .collect();
