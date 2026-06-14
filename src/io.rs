@@ -199,8 +199,8 @@ where
     unsafe {
         wam::MessageBoxA(
             None,
-            PCSTR::from_raw(msg.as_bytes().as_ptr()),
-            PCSTR::from_raw(title.as_bytes().as_ptr()),
+            PCSTR::from_raw(msg.as_bytes_with_nul().as_ptr()),
+            PCSTR::from_raw(title.as_bytes_with_nul().as_ptr()),
             wam::MB_ICONINFORMATION,
         );
     }
